@@ -8,7 +8,7 @@ class ReLU(Layer):
 
         def _backward():
             if x.requires_grad:
-                grad = (x.data > 0).astype(float)
+                grad = (x.data > 0).astype(float) * out.grad  # Multiply with upstream grad
                 x.grad = grad if x.grad is None else x.grad + grad
 
         out._backward = _backward
@@ -22,11 +22,33 @@ class Softmax(Layer):
         out = Tensor(softmax, requires_grad=x.requires_grad)
 
         def _backward():
-            if out.grad is None:
-                return
             if x.requires_grad:
                 # Backprop for softmax (simplified, works best with cross-entropy combined)
                 grad = out.grad
+                x.grad = grad if x.grad is None else x.grad + grad
+
+        out._backward = _backward
+        out._prev = {x}
+        return out
+
+class Dropout(Layer):
+    def __init__(self, p=0.5):
+        super().__init__()
+        self.p = p
+        self.mask = None
+        self.training = True  # toggle externally for inference
+
+    def forward(self, x: Tensor):
+        if not self.training or self.p == 0.0:
+            return x
+
+        keep_prob = 1 - self.p
+        self.mask = (np.random.rand(*x.data.shape) < keep_prob).astype(np.float32) / keep_prob
+        out = Tensor(x.data * self.mask, requires_grad=x.requires_grad)
+
+        def _backward():
+            if x.requires_grad:
+                grad = self.mask * out.grad
                 x.grad = grad if x.grad is None else x.grad + grad
 
         out._backward = _backward

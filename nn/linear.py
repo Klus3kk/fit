@@ -16,4 +16,21 @@ class Linear(Layer):
         self.add_parameter(self.bias)
 
     def forward(self, x):
-        return x @ self.weight + self.bias
+        out = x @ self.weight + self.bias
+
+        def _backward():
+            if x.requires_grad:
+                x_grad = out.grad @ self.weight.data.T
+                x.grad = x_grad if x.grad is None else x.grad + x_grad
+            if self.weight.requires_grad:
+                w_grad = x.data.T @ out.grad
+                self.weight.grad = w_grad if self.weight.grad is None else self.weight.grad + w_grad
+            if self.bias.requires_grad:
+                b_grad = out.grad.sum(axis=0)
+                self.bias.grad = b_grad if self.bias.grad is None else self.bias.grad + b_grad
+
+        out._backward = _backward
+        out._prev = {x, self.weight, self.bias}
+        return out
+
+

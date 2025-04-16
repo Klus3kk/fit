@@ -7,16 +7,18 @@ class SGD:
 
     def step(self):
         for param in self.parameters:
-            if param.grad is not None:
-                grad = param.grad
+            if param.grad is None:
+                continue  # skip if no gradient
+
+            grad = param.grad
             if grad.shape != param.data.shape:
                 try:
+                    # Try reducing dimensions if mismatch
                     grad = grad.sum(axis=0) if grad.shape[0] == param.data.shape[0] else grad.sum(axis=0)
                 except:
                     raise ValueError(f"Cannot align grad shape {grad.shape} with param shape {param.data.shape}")
 
-                param.data -= self.lr * grad
-
+            param.data -= self.lr * grad
 
     def zero_grad(self):
         for param in self.parameters:
