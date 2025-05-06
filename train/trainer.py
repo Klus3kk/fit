@@ -1,10 +1,12 @@
 import time
+from monitor.tracker import TrainingTracker
 
 class Trainer:
-    def __init__(self, model, loss_fn, optimizer):
+    def __init__(self, model, loss_fn, optimizer, tracker=None):
         self.model = model
         self.loss_fn = loss_fn
         self.optimizer = optimizer
+        self.tracker = tracker
 
     def _set_training_mode(self, training=True):
         def set_mode(module):
@@ -13,32 +15,28 @@ class Trainer:
             if hasattr(module, '_children'):
                 for child in module._children:
                     set_mode(child)
-
         set_mode(self.model)
 
     def fit(self, x, y, epochs=10, verbose=True):
         for epoch in range(1, epochs + 1):
-            start_time = time.time()
+            if self.tracker:
+                self.tracker.start_epoch()
 
-            # Forward
             preds = self.model(x)
             loss = self.loss_fn(preds, y)
-
-            # Backward
             loss.backward()
 
-            # Optimizer
             self.optimizer.step()
             self.optimizer.zero_grad()
 
-            # Accuracy calculation
             acc = None
-            if preds.data.ndim == 2 and preds.data.shape[1] > 1:  # classification
+            if preds.data.ndim == 2 and preds.data.shape[1] > 1:
                 predicted_labels = preds.data.argmax(axis=1)
                 correct = (predicted_labels == y.data).sum()
                 acc = correct / len(y.data)
 
-            duration = time.time() - start_time
+            if self.tracker:
+                self.tracker.log(loss=loss.data, acc=acc, lr=self.optimizer.lr)
 
             if verbose:
                 acc_str = f"{acc * 100:.2f}%" if acc is not None else "-"
@@ -46,14 +44,18 @@ class Trainer:
                 print(f"│ Epoch {epoch:03d} | Loss: {loss.data:.4f} | Acc: {acc_str:>6} | LR: {self.optimizer.lr:.4f} │")
                 print("╰" + "─" * 50 + "╯")
 
+        if self.tracker:
+            self.tracker.summary()
+
     def evaluate(self, x, y):
         self._set_training_mode(False)
         preds = self.model(x)
         loss = self.loss_fn(preds, y)
+
         acc = None
         if preds.data.ndim == 2:
             pred_labels = preds.data.argmax(axis=1)
             correct = (pred_labels == y.data).sum()
             acc = correct / len(y.data)
-        return float(loss.data), float(acc)
 
+        return float(loss.data), float(acc)
