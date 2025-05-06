@@ -37,3 +37,33 @@ class Sequential(Layer):
 
         print("╰" + "─" * 68 + "╯")
         print(f"Total trainable parameters: {total_params}")
+
+    def get_config(self):
+        """Get configuration for serialization."""
+        return {
+            "layers": [
+                {
+                    "type": layer.__class__.__name__,
+                    **(layer.get_config() if hasattr(layer, "get_config") else {})
+                }
+                for layer in self.layers
+            ]
+        }
+
+    def train(self):
+        """Set model to training mode (for layers like Dropout, BatchNorm)."""
+        for layer in self.layers:
+            if hasattr(layer, 'training'):
+                layer.training = True
+            if hasattr(layer, 'train'):
+                layer.train()
+        return self
+
+    def eval(self):
+        """Set model to evaluation mode (for layers like Dropout, BatchNorm)."""
+        for layer in self.layers:
+            if hasattr(layer, 'training'):
+                layer.training = False
+            if hasattr(layer, 'eval'):
+                layer.eval()
+        return self

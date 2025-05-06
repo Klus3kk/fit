@@ -33,4 +33,11 @@ class Linear(Layer):
         out._prev = {x, self.weight, self.bias}
         return out
 
+    def get_config(self):
+        """Get configuration for serialization."""
+        return {
+            "in_features": self.weight.data.shape[0],
+            "out_features": self.weight.data.shape[1]
+        }
+
 

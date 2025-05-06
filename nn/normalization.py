@@ -116,3 +116,10 @@ class BatchNorm(Layer):
 
     def eval(self):
         self.training = False
+
+    def get_config(self):
+        return {
+            "num_features": len(self.gamma.data),
+            "eps": self.eps,
+            "momentum": self.momentum
+        }

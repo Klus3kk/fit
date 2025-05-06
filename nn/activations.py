@@ -62,3 +62,9 @@ class Dropout(Layer):
 
     def eval(self):
         self.training = False
+
+    def get_config(self):
+        """Get configuration for serialization."""
+        return {
+            "p": self.p
+        }
