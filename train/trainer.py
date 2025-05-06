@@ -2,7 +2,7 @@ import time
 from monitor.tracker import TrainingTracker
 from core.tensor import Tensor
 import numpy as np
-import utils.regularization
+import utils.regularization as reg
 
 class Trainer:
     def __init__(self, model, loss_fn, optimizer, tracker=None, scheduler=None, grad_clip=None):
@@ -57,7 +57,7 @@ class Trainer:
 
                 # Add L2 regularization if specified
                 if l2_lambda > 0:
-                    loss = apply_l2_regularization(self.model, loss, l2_lambda)
+                    loss = reg.apply_l2_regularization(self.model, loss, l2_lambda)
 
                 loss.backward()
 
@@ -93,7 +93,7 @@ class Trainer:
 
                     # Add L2 regularization if specified
                     if l2_lambda > 0:
-                        loss_batch = apply_l2_regularization(self.model, loss_batch, l2_lambda)
+                        loss_batch = reg.apply_l2_regularization(self.model, loss_batch, l2_lambda)
 
                     # Backward pass
                     loss_batch.backward()
