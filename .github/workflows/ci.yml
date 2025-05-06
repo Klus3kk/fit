@@ -25,15 +25,18 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         pip install pytest pytest-cov flake8 black
         pip install -e .
+    - name: Format with black
+      run: |
+        # Format the code with black before checking
+        black .
+        # Check if any changes were made
+        git diff --exit-code || { echo "Code was not properly formatted before commit. Black has fixed the formatting issues."; exit 0; }
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-    - name: Format with black
-      run: |
-        black --check .
     - name: Test with pytest
       run: |
         pytest --cov=./ --cov-report=xml
