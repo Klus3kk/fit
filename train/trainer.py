@@ -2,6 +2,7 @@ import time
 from monitor.tracker import TrainingTracker
 from core.tensor import Tensor
 import numpy as np
+import utils.regularization
 
 class Trainer:
     def __init__(self, model, loss_fn, optimizer, tracker=None, scheduler=None, grad_clip=None):
