@@ -1,11 +1,36 @@
+"""
+This module implements the Trainer class for training and evaluating machine learning models.
+"""
+
 import time
-from monitor.tracker import TrainingTracker
-from core.tensor import Tensor
+
 import numpy as np
+
 import utils.regularization as reg
+from core.tensor import Tensor
+from monitor.tracker import TrainingTracker
+
 
 class Trainer:
+    """
+    Trainer class that handles model training, evaluation, and monitoring.
+
+    Provides utilities for training with mini-batches, regularization,
+    gradient clipping, and tracking metrics during training.
+    """
+
     def __init__(self, model, loss_fn, optimizer, tracker=None, scheduler=None, grad_clip=None):
+        """
+        Initialize a Trainer instance.
+
+        Args:
+            model: Model to train
+            loss_fn: Loss function
+            optimizer: Optimizer for parameter updates
+            tracker: Training tracker for monitoring metrics (optional)
+            scheduler: Learning rate scheduler (optional)
+            grad_clip: Maximum gradient norm for clipping (optional)
+        """
         self.model = model
         self.loss_fn = loss_fn
         self.optimizer = optimizer
@@ -14,23 +39,33 @@ class Trainer:
         self.grad_clip = grad_clip  # Maximum gradient norm
 
     def _set_training_mode(self, training=True):
-        """Set all modules to training or evaluation mode"""
+        """
+        Set all modules to training or evaluation mode.
+
+        Args:
+            training: If True, set to training mode; otherwise, set to evaluation mode
+        """
 
         def set_mode(module):
-            if hasattr(module, 'training'):
+            if hasattr(module, "training"):
                 module.training = training
-            if hasattr(module, 'train') and training:
+            if hasattr(module, "train") and training:
                 module.train()
-            if hasattr(module, 'eval') and not training:
+            if hasattr(module, "eval") and not training:
                 module.eval()
-            if hasattr(module, '_children'):
+            if hasattr(module, "_children"):
                 for child in module._children:
                     set_mode(child)
 
         set_mode(self.model)
 
     def _clip_gradients(self):
-        """Apply gradient clipping to all model parameters"""
+        """
+        Apply gradient clipping to all model parameters.
+
+        Prevents exploding gradients by limiting the gradient norm
+        to the value specified by self.grad_clip.
+        """
         if self.grad_clip is None:
             return
 
@@ -39,7 +74,20 @@ class Trainer:
                 param.clip_gradients(self.grad_clip)
 
     def fit(self, x, y, epochs=10, batch_size=None, verbose=True, l2_lambda=0):
-        """Train the model with optional batching and regularization"""
+        """
+        Train the model with optional batching and regularization.
+
+        Args:
+            x: Input tensor
+            y: Target tensor
+            epochs: Number of training epochs
+            batch_size: Size of mini-batches (None for full batch training)
+            verbose: Whether to print progress
+            l2_lambda: L2 regularization strength (0 for no regularization)
+
+        Returns:
+            None - training is performed in-place on the model
+        """
         n_samples = len(x.data)
 
         # Enable training mode
@@ -134,7 +182,11 @@ class Trainer:
             if verbose:
                 acc_str = f"{acc * 100:.2f}%" if acc is not None else "-"
                 print("╭" + "─" * 50 + "╮")
-                print(f"│ Epoch {epoch:03d} | Loss: {loss.data:.4f} | Acc: {acc_str:>6} | LR: {current_lr:.4f} │")
+                print(
+                    "| "
+                    + f"Epoch {epoch:03d} | Loss: {loss.data:.4f} | Acc: {acc_str:>6} | LR: {current_lr:.4f}"
+                    + " |"
+                )
                 print("╰" + "─" * 50 + "╯")
 
         # Print training summary
@@ -142,7 +194,16 @@ class Trainer:
             self.tracker.summary()
 
     def _calculate_accuracy(self, predictions, targets):
-        """Calculate accuracy for classification tasks"""
+        """
+        Calculate accuracy for classification tasks.
+
+        Args:
+            predictions: Model predictions
+            targets: Ground truth labels
+
+        Returns:
+            Accuracy as a float between 0 and 1, or None if not applicable
+        """
         if predictions.data.ndim == 2 and predictions.data.shape[1] > 1:
             # Multi-class classification
             predicted_labels = predictions.data.argmax(axis=1)
@@ -151,7 +212,17 @@ class Trainer:
         return None
 
     def evaluate(self, x, y, batch_size=None):
-        """Evaluate the model on test data"""
+        """
+        Evaluate the model on test data.
+
+        Args:
+            x: Input tensor
+            y: Target tensor
+            batch_size: Size of mini-batches (None for full batch evaluation)
+
+        Returns:
+            Tuple of (loss, accuracy)
+        """
         # Set to evaluation mode
         self._set_training_mode(False)
 

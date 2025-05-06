@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Tuple, List, Callable, Union, Dict, Any, Optional, Iterator
+
 
 class Dataset:
     """Base dataset class similar to PyTorch's Dataset."""
@@ -102,7 +102,7 @@ class DataLoaderIterator:
             raise StopIteration
 
         # Get batch indices
-        batch_indices = self.indices[self.current_idx:self.current_idx + batch_size]
+        batch_indices = self.indices[self.current_idx : self.current_idx + batch_size]
 
         # Get batch data
         batch = [self.dataset[i] for i in batch_indices]

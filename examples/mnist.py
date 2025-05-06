@@ -1,17 +1,18 @@
 # Example usage in examples/mnist.py (to be implemented later)
 import numpy as np
+
 from core.tensor import Tensor
-from nn.sequential import Sequential
+from monitor.tracker import TrainingTracker
+from nn.activations import Dropout, ReLU, Softmax
 from nn.linear import Linear
-from nn.activations import ReLU, Softmax, Dropout
+from nn.model_io import load_model, save_model
 from nn.normalization import BatchNorm
+from nn.sequential import Sequential
+from train.engine import evaluate, train
 from train.loss import CrossEntropyLoss
 from train.optim import Adam
 from train.scheduler import StepLR
-from monitor.tracker import TrainingTracker
-from utils.data import Dataset, DataLoader
-from train.engine import train, evaluate
-from nn.model_io import save_model, load_model
+from utils.data import DataLoader, Dataset
 
 
 def main():
@@ -42,7 +43,7 @@ def main():
         ReLU(),
         Dropout(0.3),
         Linear(64, 10),
-        Softmax()
+        Softmax(),
     )
 
     # Create loss function and optimizer
@@ -55,7 +56,7 @@ def main():
     # Create tracker with early stopping
     tracker = TrainingTracker(
         experiment_name="mnist_example",
-        early_stopping={"patience": 5, "metric": "val_loss", "min_delta": 0.001}
+        early_stopping={"patience": 5, "metric": "val_loss", "min_delta": 0.001},
     )
 
     # Train model
@@ -67,7 +68,7 @@ def main():
         optimizer=optimizer,
         epochs=50,
         scheduler=scheduler,
-        tracker=tracker
+        tracker=tracker,
     )
 
     # Show final summary

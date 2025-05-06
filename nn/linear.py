@@ -1,6 +1,8 @@
+import numpy as np
+
 from core.tensor import Tensor
 from nn.layer import Layer
-import numpy as np
+
 
 class Linear(Layer):
     def __init__(self, in_features, out_features):
@@ -37,7 +39,5 @@ class Linear(Layer):
         """Get configuration for serialization."""
         return {
             "in_features": self.weight.data.shape[0],
-            "out_features": self.weight.data.shape[1]
+            "out_features": self.weight.data.shape[1],
         }
-
-

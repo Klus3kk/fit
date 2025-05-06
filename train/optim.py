@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class SGD:
     def __init__(self, parameters, lr=0.01):
         self.parameters = parameters
@@ -14,9 +15,18 @@ class SGD:
             if grad.shape != param.data.shape:
                 try:
                     # Try reducing dimensions if mismatch
-                    grad = grad.sum(axis=0) if grad.shape[0] == param.data.shape[0] else grad.sum(axis=0)
-                except:
-                    raise ValueError(f"Cannot align grad shape {grad.shape} with param shape {param.data.shape}")
+                    grad = (
+                        grad.sum(axis=0)
+                        if grad.shape[0] == param.data.shape[0]
+                        else grad.sum(axis=0)
+                    )
+                except BaseException:
+                    raise ValueError(
+                        "Cannot align grad shape "
+                        + str(grad.shape)
+                        + " with param shape "
+                        + str(param.data.shape)
+                    )
 
             param.data -= self.lr * grad
 
@@ -88,8 +98,8 @@ class Adam:
             self.v[i] = self.beta2 * self.v[i] + (1 - self.beta2) * (grad * grad)
 
             # Bias correction
-            m_hat = self.m[i] / (1 - self.beta1 ** self.t)
-            v_hat = self.v[i] / (1 - self.beta2 ** self.t)
+            m_hat = self.m[i] / (1 - self.beta1**self.t)
+            v_hat = self.v[i] / (1 - self.beta2**self.t)
 
             # Update parameters
             param.data = param.data - self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
