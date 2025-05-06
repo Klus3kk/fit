@@ -31,17 +31,19 @@ class Softmax(Layer):
         out._prev = {x}
         return out
 
+
 class Dropout(Layer):
     def __init__(self, p=0.5):
         super().__init__()
         self.p = p
         self.mask = None
-        self.training = True  # toggle externally for inference
+        self.training = True  # toggle for train/eval modes
 
     def forward(self, x: Tensor):
         if not self.training or self.p == 0.0:
             return x
 
+        # Generate dropout mask
         keep_prob = 1 - self.p
         self.mask = (np.random.rand(*x.data.shape) < keep_prob).astype(np.float32) / keep_prob
         out = Tensor(x.data * self.mask, requires_grad=x.requires_grad)
@@ -54,3 +56,9 @@ class Dropout(Layer):
         out._backward = _backward
         out._prev = {x}
         return out
+
+    def train(self):
+        self.training = True
+
+    def eval(self):
+        self.training = False

@@ -213,3 +213,17 @@ class Tensor:
                 tensor.grad = np.zeros_like(tensor.data)
             tensor._backward()
 
+    def clip_gradients(self, max_norm):
+        """
+        Clips gradients to prevent exploding gradients
+        """
+        if self.grad is None:
+            return
+
+        # Calculate gradient norm
+        grad_norm = np.sqrt(np.sum(np.square(self.grad)))
+
+        # Clip if necessary
+        if grad_norm > max_norm:
+            self.grad = self.grad * (max_norm / (grad_norm + 1e-12))
+
