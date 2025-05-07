@@ -1,2 +1,6 @@
 test.py
 */__pycache__
+logs
+fit.egg-info
+.venv
+.idea

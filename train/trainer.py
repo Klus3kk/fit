@@ -4,6 +4,7 @@ from core.tensor import Tensor
 import numpy as np
 import utils.regularization
 
+
 class Trainer:
     def __init__(self, model, loss_fn, optimizer, tracker=None, scheduler=None, grad_clip=None):
         self.model = model
@@ -17,13 +18,13 @@ class Trainer:
         """Set all modules to training or evaluation mode"""
 
         def set_mode(module):
-            if hasattr(module, 'training'):
+            if hasattr(module, "training"):
                 module.training = training
-            if hasattr(module, 'train') and training:
+            if hasattr(module, "train") and training:
                 module.train()
-            if hasattr(module, 'eval') and not training:
+            if hasattr(module, "eval") and not training:
                 module.eval()
-            if hasattr(module, '_children'):
+            if hasattr(module, "_children"):
                 for child in module._children:
                     set_mode(child)
 
@@ -124,7 +125,7 @@ class Trainer:
                 self.scheduler.step()
                 current_lr = self.scheduler.get_lr()
             else:
-                current_lr = self.optimizer.lr
+                current_lr = self.optimizer.lr if hasattr(self.optimizer, "lr") else None
 
             # Log metrics
             if self.tracker:
@@ -134,7 +135,9 @@ class Trainer:
             if verbose:
                 acc_str = f"{acc * 100:.2f}%" if acc is not None else "-"
                 print("╭" + "─" * 50 + "╮")
-                print(f"│ Epoch {epoch:03d} | Loss: {loss.data:.4f} | Acc: {acc_str:>6} | LR: {current_lr:.4f} │")
+                print(
+                    f"│ Epoch {epoch:03d} | Loss: {loss.data:.4f} | Acc: {acc_str:>6} | LR: {current_lr:.4f} │"
+                )
                 print("╰" + "─" * 50 + "╯")
 
         # Print training summary

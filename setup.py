@@ -3,7 +3,8 @@ from setuptools import setup, find_packages
 setup(
     name="fit",
     version="0.1.0",
-    packages=find_packages(),
+    packages=find_packages(include=["core", "nn", "utils", "monitor", "train"]),
+    package_dir={"": "."},
     install_requires=[
         "numpy>=1.20.0",
     ],
