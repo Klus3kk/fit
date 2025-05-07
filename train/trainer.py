@@ -172,7 +172,7 @@ class Trainer:
                 self.scheduler.step()
                 current_lr = self.scheduler.get_lr()
             else:
-                current_lr = self.optimizer.lr
+                current_lr = self.optimizer.lr if hasattr(self.optimizer, "lr") else None
 
             # Log metrics
             if self.tracker:

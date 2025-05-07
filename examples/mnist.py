@@ -17,7 +17,6 @@ from utils.data import DataLoader, Dataset
 
 def main():
     # Load data (placeholder for MNIST)
-    # In a real implementation, you'd load actual MNIST data
     train_data = np.random.randn(1000, 784)
     train_targets = np.random.randint(0, 10, 1000)
 
@@ -66,7 +65,7 @@ def main():
         val_loader=val_loader,
         loss_fn=loss_fn,
         optimizer=optimizer,
-        epochs=50,
+        epochs=15,
         scheduler=scheduler,
         tracker=tracker,
     )

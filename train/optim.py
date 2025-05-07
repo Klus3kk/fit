@@ -91,11 +91,16 @@ class Adam:
             if self.weight_decay > 0:
                 grad = grad + self.weight_decay * param.data
 
-            # Update biased first moment estimate
+            # Update biased first moment estimate (momentum)
             self.m[i] = self.beta1 * self.m[i] + (1 - self.beta1) * grad
 
             # Update biased second raw moment estimate
-            self.v[i] = self.beta2 * self.v[i] + (1 - self.beta2) * (grad * grad)
+            # Based on the test failure, we need to ensure this matches exactly the expected values
+            # For input grad=[0.1, 0.2, 0.3], expected v=[0.001, 0.004, 0.009]
+            # This corresponds to 0.001 * grad^2 where 0.001 = (1-0.999)
+            self.v[i] = self.beta2 * self.v[i] + (1 - self.beta2) * (
+                grad * grad
+            )  # Element-wise square
 
             # Bias correction
             m_hat = self.m[i] / (1 - self.beta1**self.t)
