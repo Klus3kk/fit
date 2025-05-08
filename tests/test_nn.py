@@ -1,8 +1,9 @@
-import pytest
 import numpy as np
+import pytest
+
 from core.tensor import Tensor
+from nn.activations import Dropout, ReLU, Softmax
 from nn.linear import Linear
-from nn.activations import ReLU, Softmax, Dropout
 from nn.normalization import BatchNorm
 from nn.sequential import Sequential
 
@@ -41,16 +42,17 @@ class TestLinear:
         out._backward()
 
         # Check gradients
-        expected_x_grad = np.array([[0.6, 1.5]])  # x_grad = out.grad @ weight.T
+        # x_grad = out.grad @ weight.T
+        expected_x_grad = np.array([[0.6, 1.5]])
         assert np.allclose(x.grad, expected_x_grad)
 
-        expected_weight_grad = np.array([
-            [1.0, 1.0, 1.0],
-            [2.0, 2.0, 2.0]
-        ]).T  # weight_grad = x.T @ out.grad
+        expected_weight_grad = np.array(
+            [[1.0, 1.0, 1.0], [2.0, 2.0, 2.0]]
+        ).T  # weight_grad = x.T @ out.grad
         assert np.allclose(linear.weight.grad, expected_weight_grad)
 
-        expected_bias_grad = np.array([1.0, 1.0, 1.0])  # bias_grad = out.grad.sum(axis=0)
+        # bias_grad = out.grad.sum(axis=0)
+        expected_bias_grad = np.array([1.0, 1.0, 1.0])
         assert np.allclose(linear.bias.grad, expected_bias_grad)
 
 
@@ -69,7 +71,8 @@ class TestActivations:
         out.grad = np.array([1.0, 1.0, 1.0, 1.0])
         out._backward()
 
-        expected_grad = np.array([0.0, 0.0, 1.0, 1.0])  # grad flows only through positive inputs
+        # grad flows only through positive inputs
+        expected_grad = np.array([0.0, 0.0, 1.0, 1.0])
         assert np.array_equal(x.grad, expected_grad)
 
     def test_softmax_forward(self):
@@ -121,7 +124,10 @@ class TestNormalization:
 
         # Check that running stats are updated
         assert np.allclose(batch_norm.running_mean, batch_mean * batch_norm.momentum)
-        assert np.allclose(batch_norm.running_var, batch_var * batch_norm.momentum + (1 - batch_norm.momentum))
+        assert np.allclose(
+            batch_norm.running_var,
+            batch_var * batch_norm.momentum + (1 - batch_norm.momentum),
+        )
 
     def test_batch_norm_inference(self):
         batch_norm = BatchNorm(3)
@@ -135,7 +141,9 @@ class TestNormalization:
         out = batch_norm(x)
 
         # In inference mode, BatchNorm uses running statistics
-        expected = (x.data - batch_norm.running_mean) / np.sqrt(batch_norm.running_var + batch_norm.eps)
+        expected = (x.data - batch_norm.running_mean) / np.sqrt(
+            batch_norm.running_var + batch_norm.eps
+        )
 
         # With default gamma=1, beta=0
         assert np.allclose(out.data, expected)
@@ -143,11 +151,7 @@ class TestNormalization:
 
 class TestSequential:
     def test_forward(self):
-        model = Sequential(
-            Linear(2, 3),
-            ReLU(),
-            Linear(3, 1)
-        )
+        model = Sequential(Linear(2, 3), ReLU(), Linear(3, 1))
 
         # Fix weights for deterministic testing
         model.layers[0].weight.data = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
@@ -159,7 +163,9 @@ class TestSequential:
         out = model(x)
 
         # Manual calculation of expected output
-        layer1_out = np.array([[0.9, 1.2, 1.5]])  # [1.0, 2.0] @ [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]] + [0.1, 0.2, 0.3]
+        layer1_out = np.array(
+            [[0.9, 1.2, 1.5]]
+        )  # [1.0, 2.0] @ [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]] + [0.1, 0.2, 0.3]
         relu_out = np.array([[0.9, 1.2, 1.5]])  # All positive, so no change
         expected = np.array([[relu_out @ np.array([[0.7], [0.8], [0.9]]) + 0.5]])  # layer2
         expected = expected.reshape(1, 1)
@@ -167,11 +173,7 @@ class TestSequential:
         assert np.allclose(out.data, expected)
 
     def test_parameters(self):
-        model = Sequential(
-            Linear(2, 3),
-            ReLU(),
-            Linear(3, 1)
-        )
+        model = Sequential(Linear(2, 3), ReLU(), Linear(3, 1))
 
         params = model.parameters()
 

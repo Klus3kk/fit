@@ -1,14 +1,22 @@
-from collections import defaultdict
-import time
-import os
 import json
-import numpy as np
+import os
+import time
+from collections import defaultdict
 from datetime import datetime
+
+import numpy as np
 
 
 class TrainingTracker:
-    def __init__(self, experiment_name=None, log_dir="./logs", save_best=True, best_metric="loss",
-                 track_gradients=False, early_stopping=None):
+    def __init__(
+        self,
+        experiment_name=None,
+        log_dir="./logs",
+        save_best=True,
+        best_metric="loss",
+        track_gradients=False,
+        early_stopping=None,
+    ):
         """
         Enhanced training tracker with better visualization and logging.
 
@@ -20,7 +28,9 @@ class TrainingTracker:
             track_gradients: Whether to track gradient norms (requires passing gradient info)
             early_stopping: Dict with early stopping settings, e.g., {'patience': 10, 'min_delta': 0.001}
         """
-        self.experiment_name = experiment_name or f"exp_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        self.experiment_name = experiment_name
+        if self.experiment_name is None:
+            self.experiment_name = "exp_" + datetime.now().strftime("%Y%m%d_%H%M%S")
         self.log_dir = os.path.join(log_dir, self.experiment_name)
         os.makedirs(self.log_dir, exist_ok=True)
 
@@ -33,8 +43,8 @@ class TrainingTracker:
         # Enhanced features
         self.save_best = save_best
         self.best_metric = best_metric
-        self.best_values = {'loss': float('inf'), 'accuracy': 0.0}
-        self.best_epochs = {'loss': 0, 'accuracy': 0}
+        self.best_values = {"loss": float("inf"), "accuracy": 0.0}
+        self.best_epochs = {"loss": 0, "accuracy": 0}
 
         self.track_gradients = track_gradients
         self.gradient_norms = []
@@ -204,7 +214,11 @@ class TrainingTracker:
                 row = f"│ {self.current_epoch + idx + 1:4d}"
 
                 for metric in metrics:
-                    if metric == "accuracy" and metric in self.logs and idx < len(self.logs[metric]):
+                    if (
+                        metric == "accuracy"
+                        and metric in self.logs
+                        and idx < len(self.logs[metric])
+                    ):
                         row += f" | {self.logs[metric][idx] * 100:6.2f}%"
                     elif metric == "lr" and metric in self.logs and idx < len(self.logs[metric]):
                         row += f" | {self.logs[metric][idx]:.6f}"
@@ -228,14 +242,18 @@ class TrainingTracker:
             for metric in ["loss", "accuracy"]:
                 if metric in self.logs and len(self.logs[metric]) > 0:
                     if metric == "accuracy":
-                        print(
-                            f"• Best {metric}: {self.best_values[metric] * 100:.2f}% (epoch {self.best_epochs[metric]})")
+                        best_value = self.best_values[metric] * 100
+                        best_epoch = self.best_epochs[metric]
+                        print(f"* Best {metric}: {best_value:.2f}% (epoch {best_epoch})")
                     else:
-                        print(f"• Best {metric}: {self.best_values[metric]:.6f} (epoch {self.best_epochs[metric]})")
+                        best_value = self.best_values[metric]
+                        best_epoch = self.best_epochs[metric]
+                        print(f"* Best {metric}: {best_value:.6f} (epoch {best_epoch})")
 
         # Show early stopping status if enabled
         if self.early_stopping:
-            print(f"\nEarly Stopping ({self.early_stopping.get('metric', 'loss')}):")
+            metric_name = self.early_stopping.get("metric", "loss")
+            print(f"\nEarly Stopping ({metric_name}):")
             print(f"• Patience: {self.patience_counter}/{self.early_stopping.get('patience', 10)}")
             if self.should_stop:
                 print("• Status: STOP TRAINING (criteria met)")
@@ -269,7 +287,11 @@ class TrainingTracker:
                 row = f"{self.current_epoch + idx + 1:6d}"
 
                 for metric in metrics:
-                    if metric == "accuracy" and metric in self.logs and idx < len(self.logs[metric]):
+                    if (
+                        metric == "accuracy"
+                        and metric in self.logs
+                        and idx < len(self.logs[metric])
+                    ):
                         row += f" | {self.logs[metric][idx] * 100:8.2f}%"
                     elif idx < len(self.logs[metric]):
                         row += f" | {self.logs[metric][idx]:10.6f}"
@@ -290,11 +312,17 @@ class TrainingTracker:
             print("\nBest Values:")
             for metric in ["loss", "accuracy"]:
                 if metric in self.logs and len(self.logs[metric]) > 0:
+                    best_value = self.best_values[metric]
+                    best_epoch = self.best_epochs[metric]
+
                     if metric == "accuracy":
-                        print(
-                            f"- Best {metric}: {self.best_values[metric] * 100:.2f}% (epoch {self.best_epochs[metric]})")
+                        # Format accuracy as percentage
+                        formatted_value = f"{best_value * 100:.2f}%"
                     else:
-                        print(f"- Best {metric}: {self.best_values[metric]:.6f} (epoch {self.best_epochs[metric]})")
+                        # Format other metrics with 6 decimal places
+                        formatted_value = f"{best_value:.6f}"
+
+                    print(f"- Best {metric}: {formatted_value} (epoch {best_epoch})")
 
         # Show total training time
         print(f"\nTotal Training Time: {time_str}")
@@ -316,11 +344,17 @@ class TrainingTracker:
             print("\nBest Values:")
             for metric in ["loss", "accuracy"]:
                 if metric in self.logs and len(self.logs[metric]) > 0:
+                    best_value = self.best_values[metric]
+                    best_epoch = self.best_epochs[metric]
+
                     if metric == "accuracy":
-                        print(
-                            f"- Best {metric}: {self.best_values[metric] * 100:.2f}% (epoch {self.best_epochs[metric]})")
+                        # Format accuracy as percentage
+                        best_value_formatted = f"{best_value * 100:.2f}%"
                     else:
-                        print(f"- Best {metric}: {self.best_values[metric]:.6f} (epoch {self.best_epochs[metric]})")
+                        # Format other metrics with 6 decimal places
+                        best_value_formatted = f"{best_value:.6f}"
+
+                    print(f"- Best {metric}: {best_value_formatted} (epoch {best_epoch})")
 
         # Show total training time
         print(f"\nTotal Training Time: {time_str}")
@@ -355,15 +389,20 @@ class TrainingTracker:
                     continue
 
                 epochs = list(range(1, len(self.logs[metric]) + 1))
-                axes[i].plot(epochs, self.logs[metric], 'b-', linewidth=2)
+                axes[i].plot(epochs, self.logs[metric], "b-", linewidth=2)
 
                 # Add best value marking
                 if metric == "loss" or metric == "accuracy":
                     best_epoch = self.best_epochs[metric]
                     best_value = self.best_values[metric]
                     if 0 < best_epoch <= len(epochs):
-                        axes[i].plot(best_epoch, best_value, 'ro', markersize=5)
-                        axes[i].text(best_epoch, best_value, f" Best: {best_value:.6f}", verticalalignment='bottom')
+                        axes[i].plot(best_epoch, best_value, "ro", markersize=5)
+                        axes[i].text(
+                            best_epoch,
+                            best_value,
+                            f" Best: {best_value:.6f}",
+                            verticalalignment="bottom",
+                        )
 
                 # Customize plot
                 axes[i].set_title(metric.capitalize())
@@ -417,12 +456,12 @@ class TrainingTracker:
         import csv
 
         keys = self.logs.keys()
-        with open(filepath, 'w', newline='') as csvfile:
+        with open(filepath, "w", newline="") as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=keys)
             writer.writeheader()
 
             for i in range(len(self.logs["loss"])):
-                row = {k: self.logs[k][i] if i < len(self.logs[k]) else '' for k in keys}
+                row = {k: self.logs[k][i] if i < len(self.logs[k]) else "" for k in keys}
                 writer.writerow(row)
 
         print(f"Logs exported to {filepath}")
@@ -436,10 +475,10 @@ class TrainingTracker:
             "best_values": self.best_values,
             "best_epochs": self.best_epochs,
             "logs": {k: [float(v) for v in vals] for k, vals in self.logs.items()},
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             json.dump(export_data, f, indent=2)
 
         print(f"Logs exported to {filepath}")
@@ -455,9 +494,9 @@ class TrainingTracker:
         Returns:
             True if successful, False otherwise
         """
-        if filepath.endswith('.json'):
+        if filepath.endswith(".json"):
             return self._load_json(filepath)
-        elif filepath.endswith('.csv'):
+        elif filepath.endswith(".csv"):
             return self._load_csv(filepath)
         else:
             print(f"Unsupported file format: {filepath}")
@@ -466,7 +505,7 @@ class TrainingTracker:
     def _load_json(self, filepath):
         """Load logs from JSON file."""
         try:
-            with open(filepath, 'r') as f:
+            with open(filepath, "r") as f:
                 data = json.load(f)
 
             # Restore logs
@@ -494,11 +533,11 @@ class TrainingTracker:
 
             self.logs = defaultdict(list)
 
-            with open(filepath, 'r', newline='') as csvfile:
+            with open(filepath, "r", newline="") as csvfile:
                 reader = csv.DictReader(csvfile)
                 for row in reader:
                     for k, v in row.items():
-                        if v != '':
+                        if v != "":
                             self.logs[k].append(float(v))
 
             # Recalculate current epoch and best values
@@ -515,8 +554,8 @@ class TrainingTracker:
     def _update_best_values_all(self):
         """Update best values based on all logged data."""
         # Reset best values
-        self.best_values = {'loss': float('inf'), 'accuracy': 0.0}
-        self.best_epochs = {'loss': 0, 'accuracy': 0}
+        self.best_values = {"loss": float("inf"), "accuracy": 0.0}
+        self.best_epochs = {"loss": 0, "accuracy": 0}
 
         # Update loss
         if "loss" in self.logs and self.logs["loss"]:
@@ -548,8 +587,8 @@ class TrainingTracker:
             "early_stopping": {
                 "enabled": bool(self.early_stopping),
                 "patience_counter": self.patience_counter,
-                "should_stop": self.should_stop
-            }
+                "should_stop": self.should_stop,
+            },
         }
 
         # Calculate improvement rates (from last 5 epochs)
@@ -569,7 +608,7 @@ class TrainingTracker:
 
                 stats["improvement_rates"][metric] = {
                     "absolute": abs_change,
-                    "relative_percent": relative_change
+                    "relative_percent": relative_change,
                 }
 
         # Calculate metric trends
@@ -589,13 +628,11 @@ class TrainingTracker:
                         trend = "fluctuating"
 
                     # Determine if trend is good
-                    is_good = (metric == "loss" and trend == "decreasing") or \
-                              (metric != "loss" and trend == "increasing")
+                    is_good = (metric == "loss" and trend == "decreasing") or (
+                        metric != "loss" and trend == "increasing"
+                    )
 
-                    trends[metric] = {
-                        "trend": trend,
-                        "is_good": is_good
-                    }
+                    trends[metric] = {"trend": trend, "is_good": is_good}
 
             stats["trends"] = trends
 

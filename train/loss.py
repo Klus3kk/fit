@@ -1,6 +1,8 @@
+import numpy as np
+
 from core.tensor import Tensor
 from nn.layer import Layer
-import numpy as np
+
 
 class MSELoss(Layer):
     def forward(self, prediction: Tensor, target: Tensor):
@@ -42,7 +44,3 @@ class CrossEntropyLoss(Layer):
         out._backward = _backward
         out._prev = {logits}
         return out
-
-
-
-

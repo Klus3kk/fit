@@ -1,6 +1,9 @@
-from nn.layer import Layer
 import numpy as np
+
 from core.tensor import Tensor
+from nn.layer import Layer
+
+
 class Sequential(Layer):
     def __init__(self, *layers):
         super().__init__()
@@ -33,7 +36,7 @@ class Sequential(Layer):
             shape = tuple(x.data.shape)
             params = sum(np.prod(p.data.shape) for p in layer.parameters())
             total_params += params
-            print(f"│ {layer.__class__.__name__:<20} | {str(shape):<20} | {params:<12} │")
+            print("| " + f"{layer.__class__.__name__:<20} | {str(shape):<20} | {params:<12}" + " |")
 
         print("╰" + "─" * 68 + "╯")
         print(f"Total trainable parameters: {total_params}")
@@ -44,7 +47,7 @@ class Sequential(Layer):
             "layers": [
                 {
                     "type": layer.__class__.__name__,
-                    **(layer.get_config() if hasattr(layer, "get_config") else {})
+                    **(layer.get_config() if hasattr(layer, "get_config") else {}),
                 }
                 for layer in self.layers
             ]
@@ -53,17 +56,17 @@ class Sequential(Layer):
     def train(self):
         """Set model to training mode (for layers like Dropout, BatchNorm)."""
         for layer in self.layers:
-            if hasattr(layer, 'training'):
+            if hasattr(layer, "training"):
                 layer.training = True
-            if hasattr(layer, 'train'):
+            if hasattr(layer, "train"):
                 layer.train()
         return self
 
     def eval(self):
         """Set model to evaluation mode (for layers like Dropout, BatchNorm)."""
         for layer in self.layers:
-            if hasattr(layer, 'training'):
+            if hasattr(layer, "training"):
                 layer.training = False
-            if hasattr(layer, 'eval'):
+            if hasattr(layer, "eval"):
                 layer.eval()
         return self

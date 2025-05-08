@@ -1,8 +1,9 @@
 # Example implementation for train/engine.py
-from train.trainer import Trainer
+from typing import Any, Callable, Dict, Optional
+
 from monitor.tracker import TrainingTracker
+from train.trainer import Trainer
 from utils.data import DataLoader
-from typing import Optional, Callable, Dict, Any
 
 
 def train_epoch(model, dataloader, loss_fn, optimizer, device=None):
@@ -49,11 +50,11 @@ def train_epoch(model, dataloader, loss_fn, optimizer, device=None):
 
     # Calculate epoch metrics
     metrics = {
-        'loss': total_loss / len(dataloader),
+        "loss": total_loss / len(dataloader),
     }
 
     if total > 0:
-        metrics['accuracy'] = correct / total
+        metrics["accuracy"] = correct / total
 
     return metrics
 
@@ -96,26 +97,26 @@ def evaluate(model, dataloader, loss_fn, device=None):
 
     # Calculate evaluation metrics
     metrics = {
-        'loss': total_loss / len(dataloader),
+        "loss": total_loss / len(dataloader),
     }
 
     if total > 0:
-        metrics['accuracy'] = correct / total
+        metrics["accuracy"] = correct / total
 
     return metrics
 
 
 def train(
-        model,
-        train_loader,
-        val_loader,
-        loss_fn,
-        optimizer,
-        epochs=10,
-        device=None,
-        scheduler=None,
-        early_stopping=None,
-        tracker=None
+    model,
+    train_loader,
+    val_loader,
+    loss_fn,
+    optimizer,
+    epochs=10,
+    device=None,
+    scheduler=None,
+    early_stopping=None,
+    tracker=None,
 ):
     """
     Complete training loop.
@@ -137,9 +138,7 @@ def train(
     """
     # Create tracker if none provided
     if tracker is None:
-        tracker = TrainingTracker(
-            early_stopping=early_stopping
-        )
+        tracker = TrainingTracker(early_stopping=early_stopping)
 
     for epoch in range(1, epochs + 1):
         # Start epoch
@@ -163,10 +162,10 @@ def train(
             custom_metrics = {f"val_{k}": v for k, v in val_metrics.items()}
 
         tracker.log(
-            loss=train_metrics['loss'],
-            acc=train_metrics.get('accuracy'),
-            lr=optimizer.lr if hasattr(optimizer, 'lr') else None,
-            custom_metrics=custom_metrics
+            loss=train_metrics["loss"],
+            acc=train_metrics.get("accuracy"),
+            lr=optimizer.lr if hasattr(optimizer, "lr") else None,
+            custom_metrics=custom_metrics,
         )
 
         # Print progress
