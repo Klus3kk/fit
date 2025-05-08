@@ -32,7 +32,9 @@ class Linear(Layer):
 
         for i in range(batch_size):
             for j in range(self.weight.data.shape[1]):  # output features
-                result[i, j] = np.sum(x.data[i] * self.weight.data[:, j]) + self.bias.data[j]
+                result[i, j] = (
+                    np.sum(x.data[i] * self.weight.data[:, j]) + self.bias.data[j]
+                )
 
         out = Tensor(result, requires_grad=x.requires_grad or self.weight.requires_grad)
 
@@ -52,12 +54,16 @@ class Linear(Layer):
                         for b in range(batch_size):
                             w_grad[i, j] += x.data[b, i] * out.grad[b, j]
 
-                self.weight.grad = w_grad if self.weight.grad is None else self.weight.grad + w_grad
+                self.weight.grad = (
+                    w_grad if self.weight.grad is None else self.weight.grad + w_grad
+                )
 
             if self.bias.requires_grad:
                 # Sum across batch dimension
                 b_grad = out.grad.sum(axis=0)
-                self.bias.grad = b_grad if self.bias.grad is None else self.bias.grad + b_grad
+                self.bias.grad = (
+                    b_grad if self.bias.grad is None else self.bias.grad + b_grad
+                )
 
         out._backward = _backward
         out._prev = {x, self.weight, self.bias}

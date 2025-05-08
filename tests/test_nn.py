@@ -167,7 +167,9 @@ class TestSequential:
             [[0.9, 1.2, 1.5]]
         )  # [1.0, 2.0] @ [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]] + [0.1, 0.2, 0.3]
         relu_out = np.array([[0.9, 1.2, 1.5]])  # All positive, so no change
-        expected = np.array([[relu_out @ np.array([[0.7], [0.8], [0.9]]) + 0.5]])  # layer2
+        expected = np.array(
+            [[relu_out @ np.array([[0.7], [0.8], [0.9]]) + 0.5]]
+        )  # layer2
         expected = expected.reshape(1, 1)
 
         assert np.allclose(out.data, expected)

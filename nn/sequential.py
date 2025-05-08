@@ -36,7 +36,11 @@ class Sequential(Layer):
             shape = tuple(x.data.shape)
             params = sum(np.prod(p.data.shape) for p in layer.parameters())
             total_params += params
-            print("| " + f"{layer.__class__.__name__:<20} | {str(shape):<20} | {params:<12}" + " |")
+            print(
+                "| "
+                + f"{layer.__class__.__name__:<20} | {str(shape):<20} | {params:<12}"
+                + " |"
+            )
 
         print("╰" + "─" * 68 + "╯")
         print(f"Total trainable parameters: {total_params}")

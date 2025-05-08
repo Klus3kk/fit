@@ -36,7 +36,9 @@ def run_xor_example():
 
     # Create loss function, optimizer and tracker
     loss_fn = CrossEntropyLoss()
-    optimizer = Adam(model.parameters(), lr=0.01, weight_decay=1e-4)  # Use Adam with weight decay
+    optimizer = Adam(
+        model.parameters(), lr=0.01, weight_decay=1e-4
+    )  # Use Adam with weight decay
     # Reduce learning rate every 100 epochs
     scheduler = StepLR(optimizer, step_size=100, gamma=0.5)
     tracker = TrainingTracker()

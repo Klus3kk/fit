@@ -10,7 +10,9 @@ class ReLU(Layer):
 
         def _backward():
             if x.requires_grad:
-                grad = (x.data > 0).astype(float) * out.grad  # Multiply with upstream grad
+                grad = (x.data > 0).astype(
+                    float
+                ) * out.grad  # Multiply with upstream grad
                 x.grad = grad if x.grad is None else x.grad + grad
 
         out._backward = _backward
@@ -20,7 +22,9 @@ class ReLU(Layer):
 
 class Softmax(Layer):
     def forward(self, x: Tensor):
-        exps = np.exp(x.data - np.max(x.data, axis=1, keepdims=True))  # for numerical stability
+        exps = np.exp(
+            x.data - np.max(x.data, axis=1, keepdims=True)
+        )  # for numerical stability
         softmax = exps / np.sum(exps, axis=1, keepdims=True)
         out = Tensor(softmax, requires_grad=x.requires_grad)
 
@@ -49,7 +53,9 @@ class Dropout(Layer):
 
         # Generate dropout mask
         keep_prob = 1 - self.p
-        self.mask = (np.random.rand(*x.data.shape) < keep_prob).astype(np.float32) / keep_prob
+        self.mask = (np.random.rand(*x.data.shape) < keep_prob).astype(
+            np.float32
+        ) / keep_prob
         out = Tensor(x.data * self.mask, requires_grad=x.requires_grad)
 
         def _backward():

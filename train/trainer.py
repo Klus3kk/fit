@@ -19,7 +19,9 @@ class Trainer:
     gradient clipping, and tracking metrics during training.
     """
 
-    def __init__(self, model, loss_fn, optimizer, tracker=None, scheduler=None, grad_clip=None):
+    def __init__(
+        self, model, loss_fn, optimizer, tracker=None, scheduler=None, grad_clip=None
+    ):
         """
         Initialize a Trainer instance.
 
@@ -141,7 +143,9 @@ class Trainer:
 
                     # Add L2 regularization if specified
                     if l2_lambda > 0:
-                        loss_batch = reg.apply_l2_regularization(self.model, loss_batch, l2_lambda)
+                        loss_batch = reg.apply_l2_regularization(
+                            self.model, loss_batch, l2_lambda
+                        )
 
                     # Backward pass
                     loss_batch.backward()
