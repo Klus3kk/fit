@@ -11,6 +11,7 @@ from core.tensor import Tensor
 from monitor.tracker import TrainingTracker
 
 
+
 class Trainer:
     """
     Trainer class that handles model training, evaluation, and monitoring.

@@ -20,6 +20,7 @@ class SGD:
                         if grad.shape[0] == param.data.shape[0]
                         else grad.sum(axis=0)
                     )
+                    
                 except BaseException:
                     raise ValueError(
                         "Cannot align grad shape "
