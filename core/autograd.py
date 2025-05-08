@@ -184,13 +184,62 @@ class Add(Function):
 
     @staticmethod
     def apply(ctx: Dict[str, Any], a: np.ndarray, b: np.ndarray) -> np.ndarray:
+        ctx["a_shape"] = a.shape
+        ctx["b_shape"] = b.shape
         return a + b
 
     @staticmethod
     def backward(
         ctx: Dict[str, Any], grad_output: np.ndarray
     ) -> Tuple[np.ndarray, np.ndarray]:
-        return grad_output, grad_output
+        a_shape = ctx["a_shape"]
+        b_shape = ctx["b_shape"]
+
+        # Handle broadcasting - need to sum gradients along broadcasted dimensions
+        grad_a = grad_output
+        grad_b = grad_output
+
+        # If shapes don't match, handle broadcasting for gradients
+        if a_shape != b_shape:
+            # For a: sum grad_output along dimensions where a was broadcasted
+            if len(a_shape) < len(grad_output.shape):
+                # If a has fewer dimensions, it was broadcasted to match b's dimensions
+                # Sum along the extra dimensions
+                axes = tuple(range(len(grad_output.shape) - len(a_shape)))
+                grad_a = np.sum(grad_output, axis=axes)
+
+            # For each dimension where a was broadcasted
+            for i, (a_dim, out_dim) in enumerate(
+                zip(a_shape[::-1], grad_output.shape[::-1])
+            ):
+                if a_dim == 1 and out_dim > 1:
+                    # Sum along this dimension which was broadcasted
+                    grad_a = np.sum(
+                        grad_a, axis=len(grad_output.shape) - 1 - i, keepdims=True
+                    )
+
+            # For b: sum grad_output along dimensions where b was broadcasted
+            if len(b_shape) < len(grad_output.shape):
+                # If b has fewer dimensions, it was broadcasted to match a's dimensions
+                # Sum along the extra dimensions
+                axes = tuple(range(len(grad_output.shape) - len(b_shape)))
+                grad_b = np.sum(grad_output, axis=axes)
+
+            # For each dimension where b was broadcasted
+            for i, (b_dim, out_dim) in enumerate(
+                zip(b_shape[::-1], grad_output.shape[::-1])
+            ):
+                if b_dim == 1 and out_dim > 1:
+                    # Sum along this dimension which was broadcasted
+                    grad_b = np.sum(
+                        grad_b, axis=len(grad_output.shape) - 1 - i, keepdims=True
+                    )
+
+            # Reshape gradients back to original tensor shapes
+            grad_a = grad_a.reshape(a_shape)
+            grad_b = grad_b.reshape(b_shape)
+
+        return grad_a, grad_b
 
 
 class Multiply(Function):
