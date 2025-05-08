@@ -20,9 +20,13 @@ class SGD:
                         if grad.shape[0] == param.data.shape[0]
                         else grad.sum(axis=0)
                     )
-                except:
+
+                except BaseException:
                     raise ValueError(
-                        f"Cannot align grad shape {grad.shape} with param shape {param.data.shape}"
+                        "Cannot align grad shape "
+                        + str(grad.shape)
+                        + " with param shape "
+                        + str(param.data.shape)
                     )
 
             param.data -= self.lr * grad
