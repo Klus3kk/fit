@@ -1,7 +1,8 @@
-import pytest
 import numpy as np
+import pytest
+
 from core.tensor import Tensor
-from train.optim import SGD, SGDMomentum, Adam
+from train.optim import SGD, Adam, SGDMomentum
 
 
 class TestOptimizers:
@@ -36,7 +37,8 @@ class TestOptimizers:
         optimizer.step()
 
         # velocity = momentum * velocity - lr * grad = 0.9 * 0 - 0.1 * [0.1, 0.2, 0.3] = [-0.01, -0.02, -0.03]
-        # param = param + velocity = [1.0, 2.0, 3.0] + [-0.01, -0.02, -0.03] = [0.99, 1.98, 2.97]
+        # param = param + velocity = [1.0, 2.0, 3.0] + [-0.01, -0.02, -0.03] =
+        # [0.99, 1.98, 2.97]
         expected = np.array([0.99, 1.98, 2.97])
         assert np.allclose(param.data, expected)
         assert np.allclose(optimizer.velocity[0], np.array([-0.01, -0.02, -0.03]))
@@ -47,7 +49,8 @@ class TestOptimizers:
 
         # velocity = momentum * velocity - lr * grad = 0.9 * [-0.01, -0.02, -0.03] - 0.1 * [0.1, 0.2, 0.3]
         #          = [-0.009, -0.018, -0.027] - [0.01, 0.02, 0.03] = [-0.019, -0.038, -0.057]
-        # param = param + velocity = [0.99, 1.98, 2.97] + [-0.019, -0.038, -0.057] = [0.971, 1.942, 2.913]
+        # param = param + velocity = [0.99, 1.98, 2.97] + [-0.019, -0.038,
+        # -0.057] = [0.971, 1.942, 2.913]
         expected_velocity = np.array([-0.019, -0.038, -0.057])
         assert np.allclose(optimizer.velocity[0], expected_velocity)
         expected_param = np.array([0.971, 1.942, 2.913])

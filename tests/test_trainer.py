@@ -1,14 +1,15 @@
-import pytest
 import numpy as np
+import pytest
+
 from core.tensor import Tensor
-from nn.sequential import Sequential
-from nn.linear import Linear
-from nn.activations import ReLU, Softmax
-from train.loss import MSELoss, CrossEntropyLoss
-from train.optim import SGD
-from train.trainer import Trainer
-from train.scheduler import StepLR
 from monitor.tracker import TrainingTracker
+from nn.activations import ReLU, Softmax
+from nn.linear import Linear
+from nn.sequential import Sequential
+from train.loss import CrossEntropyLoss, MSELoss
+from train.optim import SGD
+from train.scheduler import StepLR
+from train.trainer import Trainer
 
 
 class TestLoss:
@@ -28,11 +29,15 @@ class TestLoss:
     def test_cross_entropy_loss(self):
         ce = CrossEntropyLoss()
         # Logits for 3 samples, 3 classes
-        logits = Tensor(np.array([
-            [2.0, 1.0, 0.1],  # First sample, most confident about class 0
-            [0.1, 2.0, 1.0],  # Second sample, most confident about class 1
-            [0.1, 1.0, 2.0]  # Third sample, most confident about class 2
-        ]))
+        logits = Tensor(
+            np.array(
+                [
+                    [2.0, 1.0, 0.1],  # First sample, most confident about class 0
+                    [0.1, 2.0, 1.0],  # Second sample, most confident about class 1
+                    [0.1, 1.0, 2.0],  # Third sample, most confident about class 2
+                ]
+            )
+        )
         # True class indices
         targets = Tensor(np.array([0, 1, 2]))
 
@@ -60,25 +65,14 @@ class TestTrainer:
         self.y = Tensor(np.array([0, 1, 1, 0]), requires_grad=False)
 
         # Create a simple model
-        self.model = Sequential(
-            Linear(2, 4),
-            ReLU(),
-            Linear(4, 2),
-            Softmax()
-        )
+        self.model = Sequential(Linear(2, 4), ReLU(), Linear(4, 2), Softmax())
 
         # Set fixed weights for deterministic testing
-        self.model.layers[0].weight.data = np.array([
-            [0.1, 0.2, 0.3, 0.4],
-            [0.5, 0.6, 0.7, 0.8]
-        ])
+        self.model.layers[0].weight.data = np.array([[0.1, 0.2, 0.3, 0.4], [0.5, 0.6, 0.7, 0.8]])
         self.model.layers[0].bias.data = np.array([0.1, 0.1, 0.1, 0.1])
-        self.model.layers[2].weight.data = np.array([
-            [0.1, 0.2],
-            [0.3, 0.4],
-            [0.5, 0.6],
-            [0.7, 0.8]
-        ])
+        self.model.layers[2].weight.data = np.array(
+            [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6], [0.7, 0.8]]
+        )
         self.model.layers[2].bias.data = np.array([0.1, 0.1])
 
         # Create loss function and optimizer

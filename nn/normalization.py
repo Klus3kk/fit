@@ -1,6 +1,7 @@
+import numpy as np
+
 from core.tensor import Tensor
 from nn.layer import Layer
-import numpy as np
 
 
 class BatchNorm(Layer):
@@ -46,12 +47,10 @@ class BatchNorm(Layer):
 
             # Update running statistics
             self.running_mean = (
-                    self.momentum * batch_mean.squeeze() +
-                    (1 - self.momentum) * self.running_mean
+                self.momentum * batch_mean.squeeze() + (1 - self.momentum) * self.running_mean
             )
             self.running_var = (
-                    self.momentum * batch_var.squeeze() +
-                    (1 - self.momentum) * self.running_var
+                self.momentum * batch_var.squeeze() + (1 - self.momentum) * self.running_var
             )
 
             # Normalize
@@ -96,8 +95,10 @@ class BatchNorm(Layer):
             dx_norm = out.grad * self.gamma.data
 
             # Step 2: Gradient through normalization
-            dx_var = -0.5 * np.sum(dx_norm * (x_reshaped - batch_mean), axis=0) * std_inv ** 3
-            dx_mean = -np.sum(dx_norm * std_inv, axis=0) - 2.0 * dx_var * np.mean(x_reshaped - batch_mean, axis=0)
+            dx_var = -0.5 * np.sum(dx_norm * (x_reshaped - batch_mean), axis=0) * std_inv**3
+            dx_mean = -np.sum(dx_norm * std_inv, axis=0) - 2.0 * dx_var * np.mean(
+                x_reshaped - batch_mean, axis=0
+            )
 
             dx = dx_norm * std_inv + dx_var * 2.0 * (x_reshaped - batch_mean) / N + dx_mean / N
 
@@ -121,5 +122,5 @@ class BatchNorm(Layer):
         return {
             "num_features": len(self.gamma.data),
             "eps": self.eps,
-            "momentum": self.momentum
+            "momentum": self.momentum,
         }

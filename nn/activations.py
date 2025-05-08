@@ -1,6 +1,8 @@
-from nn.layer import Layer
-from core.tensor import Tensor
 import numpy as np
+
+from core.tensor import Tensor
+from nn.layer import Layer
+
 
 class ReLU(Layer):
     def forward(self, x):
@@ -15,6 +17,7 @@ class ReLU(Layer):
         out._prev = {x}
         return out
 
+
 class Softmax(Layer):
     def forward(self, x: Tensor):
         exps = np.exp(x.data - np.max(x.data, axis=1, keepdims=True))  # for numerical stability
@@ -23,7 +26,8 @@ class Softmax(Layer):
 
         def _backward():
             if x.requires_grad:
-                # Backprop for softmax (simplified, works best with cross-entropy combined)
+                # Backprop for softmax (simplified, works best with
+                # cross-entropy combined)
                 grad = out.grad
                 x.grad = grad if x.grad is None else x.grad + grad
 
@@ -65,6 +69,4 @@ class Dropout(Layer):
 
     def get_config(self):
         """Get configuration for serialization."""
-        return {
-            "p": self.p
-        }
+        return {"p": self.p}

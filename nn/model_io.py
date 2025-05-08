@@ -1,8 +1,11 @@
-import os
 import json
+import os
 import pickle
+
 import numpy as np
+
 from core.tensor import Tensor
+
 
 def save_model(model, path):
     """
@@ -21,15 +24,14 @@ def save_model(model, path):
     model_data = {
         "model_type": model.__class__.__name__,
         "parameters": [],
-        "config": {}
+        "config": {},
     }
 
     # Save parameters
     for param in model.parameters():
-        model_data["parameters"].append({
-            "data": param.data.tolist(),
-            "requires_grad": param.requires_grad
-        })
+        model_data["parameters"].append(
+            {"data": param.data.tolist(), "requires_grad": param.requires_grad}
+        )
 
     # Save configuration if available
     if hasattr(model, "get_config"):
@@ -38,9 +40,7 @@ def save_model(model, path):
         # For Sequential models, save layer configurations
         layers_config = []
         for layer in model.layers:
-            layer_config = {
-                "type": layer.__class__.__name__
-            }
+            layer_config = {"type": layer.__class__.__name__}
 
             # Add layer-specific config if available
             if hasattr(layer, "get_config"):
@@ -51,7 +51,7 @@ def save_model(model, path):
         model_data["config"]["layers"] = layers_config
 
     # Save to file
-    with open(path, 'wb') as f:
+    with open(path, "wb") as f:
         pickle.dump(model_data, f)
 
     print(f"Model saved to {path}")
@@ -69,7 +69,7 @@ def load_model(path, model_class=None):
         Loaded model
     """
     # Load model data
-    with open(path, 'rb') as f:
+    with open(path, "rb") as f:
         model_data = pickle.load(f)
 
     # Instantiate model if class provided
@@ -98,21 +98,26 @@ def load_model(path, model_class=None):
                     # Import and instantiate each layer
                     if layer_type == "Linear":
                         from nn.linear import Linear
+
                         in_features = layer_config.get("in_features")
                         out_features = layer_config.get("out_features")
                         layer = Linear(in_features, out_features)
                     elif layer_type == "ReLU":
                         from nn.activations import ReLU
+
                         layer = ReLU()
                     elif layer_type == "Softmax":
                         from nn.activations import Softmax
+
                         layer = Softmax()
                     elif layer_type == "Dropout":
                         from nn.activations import Dropout
+
                         p = layer_config.get("p", 0.5)
                         layer = Dropout(p)
                     elif layer_type == "BatchNorm":
                         from nn.normalization import BatchNorm
+
                         num_features = layer_config.get("num_features")
                         eps = layer_config.get("eps", 1e-5)
                         momentum = layer_config.get("momentum", 0.1)
@@ -129,7 +134,13 @@ def load_model(path, model_class=None):
         params = model.parameters()
 
         if len(params) != len(model_data["parameters"]):
-            raise ValueError(f"Model has {len(params)} parameters, but {len(model_data['parameters'])} were saved")
+            raise ValueError(
+                "Model has "
+                + str(len(params))
+                + " parameters, but "
+                + str(len(model_data["parameters"]))
+                + " were saved"
+            )
 
         for i, param_data in enumerate(model_data["parameters"]):
             params[i].data = np.array(param_data["data"])
@@ -137,5 +148,3 @@ def load_model(path, model_class=None):
 
     print(f"Model loaded from {path}")
     return model
-
-

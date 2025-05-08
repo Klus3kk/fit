@@ -71,4 +71,3 @@ trainer.fit(X, y, epochs=100)
 # Make predictions
 predictions = model(X)
 ```
-

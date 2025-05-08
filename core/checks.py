@@ -1,8 +1,23 @@
+"""
+This module provides gradient checking utilities to verify backpropagation calculations.
+"""
+
 import numpy as np
 
+
 def check_gradients(model, x, y, loss_fn, epsilon=1e-5, threshold=1e-3):
-    """
-    Compares analytical gradients from backprop to numerical gradients.
+    """Compare analytical gradients from backpropagation to numerical gradients.
+
+    Args:
+        model: The neural network model to check
+        x: Input tensor
+        y: Target tensor
+        loss_fn: Loss function
+        epsilon: Small perturbation for numerical gradient calculation
+        threshold: Maximum allowable relative error
+
+    Raises:
+        AssertionError: If the relative error between analytical and numerical gradients exceeds threshold
     """
     # Forward and backward to compute analytical gradients
     preds = model(x)
@@ -41,4 +56,6 @@ def check_gradients(model, x, y, loss_fn, epsilon=1e-5, threshold=1e-3):
         print(f"  Param shape: {param.data.shape}")
         print(f"  Mean relative error: {relative_error:.6e}")
 
-        assert relative_error < threshold, f"Gradient check failed! Relative error: {relative_error}"
+        assert (
+            relative_error < threshold
+        ), f"Gradient check failed! Relative error: {relative_error}"
