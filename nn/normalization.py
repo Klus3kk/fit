@@ -47,10 +47,12 @@ class BatchNorm(Layer):
 
             # Update running statistics
             self.running_mean = (
-                self.momentum * batch_mean.squeeze() + (1 - self.momentum) * self.running_mean
+                self.momentum * batch_mean.squeeze()
+                + (1 - self.momentum) * self.running_mean
             )
             self.running_var = (
-                self.momentum * batch_var.squeeze() + (1 - self.momentum) * self.running_var
+                self.momentum * batch_var.squeeze()
+                + (1 - self.momentum) * self.running_var
             )
 
             # Normalize
@@ -60,7 +62,9 @@ class BatchNorm(Layer):
             self.cache = (x_reshaped, batch_mean, batch_var, x_norm)
         else:
             # Use running statistics during inference
-            x_norm = (x_reshaped - self.running_mean) / np.sqrt(self.running_var + self.eps)
+            x_norm = (x_reshaped - self.running_mean) / np.sqrt(
+                self.running_var + self.eps
+            )
 
         # Scale and shift
         out_data = self.gamma.data * x_norm + self.beta.data
@@ -95,12 +99,18 @@ class BatchNorm(Layer):
             dx_norm = out.grad * self.gamma.data
 
             # Step 2: Gradient through normalization
-            dx_var = -0.5 * np.sum(dx_norm * (x_reshaped - batch_mean), axis=0) * std_inv**3
+            dx_var = (
+                -0.5 * np.sum(dx_norm * (x_reshaped - batch_mean), axis=0) * std_inv**3
+            )
             dx_mean = -np.sum(dx_norm * std_inv, axis=0) - 2.0 * dx_var * np.mean(
                 x_reshaped - batch_mean, axis=0
             )
 
-            dx = dx_norm * std_inv + dx_var * 2.0 * (x_reshaped - batch_mean) / N + dx_mean / N
+            dx = (
+                dx_norm * std_inv
+                + dx_var * 2.0 * (x_reshaped - batch_mean) / N
+                + dx_mean / N
+            )
 
             # Reshape gradient back to original shape if needed
             if x.data.ndim != 2:

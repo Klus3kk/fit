@@ -7,6 +7,10 @@ from nn.layer import Layer
 class Linear(Layer):
     def __init__(self, in_features, out_features):
         super().__init__()
+        # Store dimensions
+        self.in_features = in_features
+        self.out_features = out_features
+
         # Xavier/Glorot Initialization
         weight = np.random.randn(in_features, out_features) * (1 / np.sqrt(in_features))
         bias = np.zeros(out_features)
@@ -52,12 +56,16 @@ class Linear(Layer):
                         for b in range(batch_size):
                             w_grad[i, j] += x.data[b, i] * out.grad[b, j]
 
-                self.weight.grad = w_grad if self.weight.grad is None else self.weight.grad + w_grad
+                self.weight.grad = (
+                    w_grad if self.weight.grad is None else self.weight.grad + w_grad
+                )
 
             if self.bias.requires_grad:
                 # Sum across batch dimension
                 b_grad = out.grad.sum(axis=0)
-                self.bias.grad = b_grad if self.bias.grad is None else self.bias.grad + b_grad
+                self.bias.grad = (
+                    b_grad if self.bias.grad is None else self.bias.grad + b_grad
+                )
 
         out._backward = _backward
         out._prev = {x, self.weight, self.bias}

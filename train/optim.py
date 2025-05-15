@@ -20,7 +20,7 @@ class SGD:
                         if grad.shape[0] == param.data.shape[0]
                         else grad.sum(axis=0)
                     )
-                    
+
                 except BaseException:
                     raise ValueError(
                         "Cannot align grad shape "
@@ -67,7 +67,9 @@ class SGDMomentum:
 
 
 class Adam:
-    def __init__(self, parameters, lr=0.001, betas=(0.9, 0.999), eps=1e-8, weight_decay=0):
+    def __init__(
+        self, parameters, lr=0.001, betas=(0.9, 0.999), eps=1e-8, weight_decay=0
+    ):
         self.parameters = parameters
         self.lr = lr
         self.beta1, self.beta2 = betas

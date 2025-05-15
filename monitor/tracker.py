@@ -72,7 +72,9 @@ class TrainingTracker:
             custom_metrics: Dict of any additional metrics to track
         """
         # Calculate epoch duration
-        duration = time.time() - self.epoch_start_time if self.epoch_start_time else None
+        duration = (
+            time.time() - self.epoch_start_time if self.epoch_start_time else None
+        )
 
         # Log standard metrics
         self.logs["loss"].append(float(loss))
@@ -220,7 +222,11 @@ class TrainingTracker:
                         and idx < len(self.logs[metric])
                     ):
                         row += f" | {self.logs[metric][idx] * 100:6.2f}%"
-                    elif metric == "lr" and metric in self.logs and idx < len(self.logs[metric]):
+                    elif (
+                        metric == "lr"
+                        and metric in self.logs
+                        and idx < len(self.logs[metric])
+                    ):
                         row += f" | {self.logs[metric][idx]:.6f}"
                     elif idx < len(self.logs[metric]):
                         row += f" | {self.logs[metric][idx]:.6f}"
@@ -244,7 +250,9 @@ class TrainingTracker:
                     if metric == "accuracy":
                         best_value = self.best_values[metric] * 100
                         best_epoch = self.best_epochs[metric]
-                        print(f"* Best {metric}: {best_value:.2f}% (epoch {best_epoch})")
+                        print(
+                            f"* Best {metric}: {best_value:.2f}% (epoch {best_epoch})"
+                        )
                     else:
                         best_value = self.best_values[metric]
                         best_epoch = self.best_epochs[metric]
@@ -254,7 +262,9 @@ class TrainingTracker:
         if self.early_stopping:
             metric_name = self.early_stopping.get("metric", "loss")
             print(f"\nEarly Stopping ({metric_name}):")
-            print(f"• Patience: {self.patience_counter}/{self.early_stopping.get('patience', 10)}")
+            print(
+                f"• Patience: {self.patience_counter}/{self.early_stopping.get('patience', 10)}"
+            )
             if self.should_stop:
                 print("• Status: STOP TRAINING (criteria met)")
             else:
@@ -354,7 +364,9 @@ class TrainingTracker:
                         # Format other metrics with 6 decimal places
                         best_value_formatted = f"{best_value:.6f}"
 
-                    print(f"- Best {metric}: {best_value_formatted} (epoch {best_epoch})")
+                    print(
+                        f"- Best {metric}: {best_value_formatted} (epoch {best_epoch})"
+                    )
 
         # Show total training time
         print(f"\nTotal Training Time: {time_str}")
@@ -376,7 +388,9 @@ class TrainingTracker:
 
             if metrics is None:
                 # Plot all metrics except time
-                metrics = [k for k in self.logs.keys() if k != "time" and len(self.logs[k]) > 0]
+                metrics = [
+                    k for k in self.logs.keys() if k != "time" and len(self.logs[k]) > 0
+                ]
 
             # Create figure
             fig, axes = plt.subplots(len(metrics), 1, figsize=figsize, sharex=True)
@@ -461,7 +475,9 @@ class TrainingTracker:
             writer.writeheader()
 
             for i in range(len(self.logs["loss"])):
-                row = {k: self.logs[k][i] if i < len(self.logs[k]) else "" for k in keys}
+                row = {
+                    k: self.logs[k][i] if i < len(self.logs[k]) else "" for k in keys
+                }
                 writer.writerow(row)
 
         print(f"Logs exported to {filepath}")

@@ -11,7 +11,6 @@ from core.tensor import Tensor
 from monitor.tracker import TrainingTracker
 
 
-
 class Trainer:
     """
     Trainer class that handles model training, evaluation, and monitoring.
@@ -20,7 +19,9 @@ class Trainer:
     gradient clipping, and tracking metrics during training.
     """
 
-    def __init__(self, model, loss_fn, optimizer, tracker=None, scheduler=None, grad_clip=None):
+    def __init__(
+        self, model, loss_fn, optimizer, tracker=None, scheduler=None, grad_clip=None
+    ):
         """
         Initialize a Trainer instance.
 
@@ -142,7 +143,9 @@ class Trainer:
 
                     # Add L2 regularization if specified
                     if l2_lambda > 0:
-                        loss_batch = reg.apply_l2_regularization(self.model, loss_batch, l2_lambda)
+                        loss_batch = reg.apply_l2_regularization(
+                            self.model, loss_batch, l2_lambda
+                        )
 
                     # Backward pass
                     loss_batch.backward()
@@ -173,7 +176,7 @@ class Trainer:
                 self.scheduler.step()
                 current_lr = self.scheduler.get_lr()
             else:
-                current_lr = self.optimizer.lr if hasattr(self.optimizer, "lr") else None
+                current_lr = self.optimizer.lr
 
             # Log metrics
             if self.tracker:

@@ -3,9 +3,12 @@ This module implements the Tensor class for automatic differentiation in the ML 
 """
 
 import numpy as np
+from typing import Any, Callable, List, Optional, Set, Tuple, Union
+
+from core.autograd import Node, get_function
 
 
-class Tensor:
+class Tensor(Node):
     """
     Core tensor class with automatic differentiation capabilities.
 
@@ -21,18 +24,17 @@ class Tensor:
             data: Input data (numpy array or convertible to numpy array)
             requires_grad: Whether the tensor requires gradient computation
         """
+        super().__init__(requires_grad=requires_grad)
+
         if not isinstance(data, np.ndarray):
             data = np.array(data, dtype=np.float32)
 
         self.data = data
-        self.requires_grad = requires_grad
-        self.grad = None
-        self._backward = lambda: None
-        self._prev = set()
+        self._prev = set()  # Dependencies for backward pass
 
     def __repr__(self):
         """Return string representation of the tensor."""
-        return f"Tensor(data={self.data}, grad={self.grad})"
+        return f"Tensor(data={self.data}, requires_grad={self.requires_grad}, grad={self.grad})"
 
     def __add__(self, other):
         """
@@ -44,28 +46,16 @@ class Tensor:
         Returns:
             A new tensor containing the result
         """
+        # Convert scalar to tensor if needed
         other = other if isinstance(other, Tensor) else Tensor(other)
-        out = Tensor(
-            self.data + other.data,
-            requires_grad=self.requires_grad or other.requires_grad,
-        )
 
-        def _backward():
-            if self.requires_grad:
-                grad = np.ones_like(self.data) * out.grad
-                self.grad = grad if self.grad is None else self.grad + grad
-            if other.requires_grad:
-                grad = np.ones_like(other.data) * out.grad
-                other.grad = grad if other.grad is None else other.grad + grad
+        # Use the Add function from autograd
+        add_fn = get_function("add")
+        return add_fn.forward(self, other)
 
-        out._backward = _backward
-        out._prev = set()
-        if self.requires_grad:
-            out._prev.add(self)
-        if other.requires_grad:
-            out._prev.add(other)
-
-        return out
+    def __radd__(self, other):
+        """Handle right addition (scalar + tensor)."""
+        return self.__add__(other)
 
     def __mul__(self, other):
         """
@@ -77,28 +67,16 @@ class Tensor:
         Returns:
             A new tensor containing the result
         """
+        # Convert scalar to tensor if needed
         other = other if isinstance(other, Tensor) else Tensor(other)
-        out = Tensor(
-            self.data * other.data,
-            requires_grad=self.requires_grad or other.requires_grad,
-        )
 
-        def _backward():
-            if self.requires_grad:
-                grad = other.data * out.grad
-                self.grad = grad if self.grad is None else self.grad + grad
-            if other.requires_grad:
-                grad = self.data * out.grad
-                other.grad = grad if other.grad is None else other.grad + grad
+        # Use the Multiply function from autograd
+        mul_fn = get_function("multiply")
+        return mul_fn.forward(self, other)
 
-        out._backward = _backward
-        out._prev = set()
-        if self.requires_grad:
-            out._prev.add(self)
-        if other.requires_grad:
-            out._prev.add(other)
-
-        return out
+    def __rmul__(self, other):
+        """Handle right multiplication (scalar * tensor)."""
+        return self.__mul__(other)
 
     def __sub__(self, other):
         """
@@ -112,6 +90,11 @@ class Tensor:
         """
         other = other if isinstance(other, Tensor) else Tensor(other)
         return self + (-other)
+
+    def __rsub__(self, other):
+        """Handle right subtraction (scalar - tensor)."""
+        other = other if isinstance(other, Tensor) else Tensor(other)
+        return other + (-self)
 
     def __neg__(self):
         """
@@ -135,6 +118,11 @@ class Tensor:
         other = other if isinstance(other, Tensor) else Tensor(other)
         return self * other**-1
 
+    def __rtruediv__(self, other):
+        """Handle right division (scalar / tensor)."""
+        other = other if isinstance(other, Tensor) else Tensor(other)
+        return other * self**-1
+
     def __pow__(self, power):
         """
         Raise this tensor to a power.
@@ -145,14 +133,21 @@ class Tensor:
         Returns:
             A new tensor containing the result
         """
+        if isinstance(power, Tensor):
+            raise NotImplementedError("Tensor powers not yet supported")
+
+        if not self.requires_grad:
+            return Tensor(self.data**power)
+
+        # For now, handle this directly since we haven't defined a Power function
         out = Tensor(self.data**power, requires_grad=self.requires_grad)
 
         def _backward():
-            if self.requires_grad:
+            if self.requires_grad and out.grad is not None:
                 grad = power * self.data ** (power - 1) * out.grad
                 self.grad = grad if self.grad is None else self.grad + grad
 
-        out._backward = _backward
+        out.backward_fn = _backward
         out._prev = {self}
         return out
 
@@ -167,27 +162,10 @@ class Tensor:
             A new tensor containing the result
         """
         other = other if isinstance(other, Tensor) else Tensor(other)
-        out = Tensor(
-            self.data @ other.data,
-            requires_grad=self.requires_grad or other.requires_grad,
-        )
 
-        def _backward():
-            if self.requires_grad:
-                grad = out.grad @ other.data.T
-                self.grad = grad if self.grad is None else self.grad + grad
-            if other.requires_grad:
-                grad = self.data.T @ out.grad
-                other.grad = grad if other.grad is None else other.grad + grad
-
-        out._backward = _backward
-        out._prev = set()
-        if self.requires_grad:
-            out._prev.add(self)
-        if other.requires_grad:
-            out._prev.add(other)
-
-        return out
+        # Use the MatMul function from autograd
+        matmul_fn = get_function("matmul")
+        return matmul_fn.forward(self, other)
 
     def __getitem__(self, idx):
         """
@@ -201,14 +179,17 @@ class Tensor:
         """
         out = Tensor(self.data[idx], requires_grad=self.requires_grad)
 
-        def _backward():
-            if self.requires_grad:
-                grad = np.zeros_like(self.data)
-                grad[idx] = out.grad
-                self.grad = grad if self.grad is None else self.grad + grad
+        if self.requires_grad:
 
-        out._backward = _backward
-        out._prev = {self}
+            def _backward():
+                if out.grad is not None:
+                    if self.grad is None:
+                        self.grad = np.zeros_like(self.data)
+                    self.grad[idx] += out.grad
+
+            out.backward_fn = _backward
+            out._prev = {self}
+
         return out
 
     def __hash__(self):
@@ -230,38 +211,24 @@ class Tensor:
         Returns:
             A new tensor with summed values
         """
-        out_data = np.sum(self.data, axis=axis, keepdims=keepdims)
-        out = Tensor(out_data, requires_grad=self.requires_grad)
+        # Use the Sum function from autograd
+        sum_fn = get_function("sum")
+        return sum_fn.forward(self, axis, keepdims)
 
-        def _backward():
-            if self.requires_grad:
-                grad = out.grad
-                # Broadcast grad to match input shape
-                shape = np.ones_like(self.data).sum(axis=axis, keepdims=keepdims).shape
-                grad = np.broadcast_to(grad, shape)
-                self.grad = grad if self.grad is None else self.grad + grad
-
-        out._backward = _backward
-        out._prev = {self}
-        return out
-
-    def mean(self):
+    def mean(self, axis=None, keepdims=False):
         """
-        Calculate the mean of all tensor elements.
+        Calculate the mean of tensor elements along specified axis.
+
+        Args:
+            axis: Axis along which to calculate mean
+            keepdims: Whether to keep the reduced dimensions
 
         Returns:
             A new tensor containing the mean value
         """
-        out = Tensor(self.data.mean(), requires_grad=self.requires_grad)
-
-        def _backward():
-            if self.requires_grad:
-                grad = np.ones_like(self.data) * out.grad / self.data.size
-                self.grad = grad if self.grad is None else self.grad + grad
-
-        out._backward = _backward
-        out._prev = {self}
-        return out
+        # Use the Mean function from autograd
+        mean_fn = get_function("mean")
+        return mean_fn.forward(self, axis, keepdims)
 
     def exp(self):
         """
@@ -270,16 +237,9 @@ class Tensor:
         Returns:
             A new tensor with exponential values
         """
-        out = Tensor(np.exp(self.data), requires_grad=self.requires_grad)
-
-        def _backward():
-            if self.requires_grad:
-                grad = np.exp(self.data) * out.grad
-                self.grad = grad if self.grad is None else self.grad + grad
-
-        out._backward = _backward
-        out._prev = {self}
-        return out
+        # Use the Exp function from autograd
+        exp_fn = get_function("exp")
+        return exp_fn.forward(self)
 
     def log(self):
         """
@@ -288,16 +248,23 @@ class Tensor:
         Returns:
             A new tensor with logarithm values
         """
-        out = Tensor(np.log(self.data), requires_grad=self.requires_grad)
+        # Use the Log function from autograd
+        log_fn = get_function("log")
+        return log_fn.forward(self)
 
-        def _backward():
-            if self.requires_grad:
-                grad = (1 / self.data) * out.grad
-                self.grad = grad if self.grad is None else self.grad + grad
+    def reshape(self, shape):
+        """
+        Reshape the tensor to the specified shape.
 
-        out._backward = _backward
-        out._prev = {self}
-        return out
+        Args:
+            shape: New shape for the tensor
+
+        Returns:
+            A new tensor with the specified shape
+        """
+        # Use the Reshape function from autograd
+        reshape_fn = get_function("reshape")
+        return reshape_fn.forward(self, shape)
 
     def max(self, axis=None, keepdims=False):
         """
@@ -312,50 +279,69 @@ class Tensor:
         """
         data = self.data
         max_data = np.max(data, axis=axis, keepdims=keepdims)
-        out = Tensor(max_data)
+        out = Tensor(max_data, requires_grad=self.requires_grad)
 
-        def _backward():
-            if self.requires_grad:
-                grad = np.zeros_like(self.data)
-                # Handle multiple max values per row (non-unique max)
-                mask = self.data == np.max(self.data, axis=axis, keepdims=True)
-                grad[mask] = 1.0  # distribute equally if multiple max
-                grad_tensor = Tensor(grad)
-                if not keepdims and axis is not None:
-                    grad_tensor = grad_tensor.reshape(out.shape)  # shape match
-                self.backward(grad_tensor)
+        if self.requires_grad:
 
-        out._backward = _backward
-        out._prev = {self}
+            def _backward():
+                if out.grad is not None:
+                    # Create a mask for the maximum values
+                    mask = np.zeros_like(self.data)
+
+                    if axis is None:
+                        # Single global maximum
+                        mask.flat[np.argmax(self.data)] = 1.0
+                    else:
+                        # Maximum along specified axis
+                        indices = np.argmax(self.data, axis=axis)
+                        if not keepdims:
+                            # Create indices for all dimensions
+                            idx_tuple = []
+                            for i in range(self.data.ndim):
+                                if i == axis:
+                                    idx_tuple.append(indices)
+                                else:
+                                    idx_tuple.append(
+                                        np.arange(self.data.shape[i])[:, None]
+                                    )
+                            # Set corresponding elements to 1.0
+                            mask[tuple(idx_tuple)] = 1.0
+                        else:
+                            # Handle keepdims case
+                            mask = self.data == np.max(
+                                self.data, axis=axis, keepdims=True
+                            )
+
+                    # Apply upstream gradient
+                    grad = mask * (
+                        np.reshape(out.grad, mask.shape) if keepdims else out.grad
+                    )
+                    self.grad = grad if self.grad is None else self.grad + grad
+
+            out.backward_fn = _backward
+            out._prev = {self}
+
         return out
 
-    def backward(self):
+    def relu(self):
+        """
+        Apply ReLU (Rectified Linear Unit) activation to the tensor.
+
+        Returns:
+            A new tensor with ReLU applied
+        """
+        # Use the ReLU function from autograd
+        relu_fn = get_function("relu")
+        return relu_fn.forward(self)
+
+    def backward(self, gradient=None):
         """
         Perform backpropagation starting from this tensor.
 
-        Computes gradients for all tensors in the computational graph
-        that require gradients.
+        Args:
+            gradient: Initial gradient value (optional)
         """
-        if self.grad is None:
-            self.grad = np.ones_like(self.data)
-        print("Backward on:", self.data)
-        print("Initial grad:", self.grad)
-
-        visited = set()
-        order = []
-
-        def topo(tensor):
-            if tensor not in visited:
-                visited.add(tensor)
-                for child in tensor._prev:
-                    topo(child)
-                order.append(tensor)
-
-        topo(self)
-        for tensor in reversed(order):
-            if tensor.grad is None:
-                tensor.grad = np.zeros_like(tensor.data)
-            tensor._backward()
+        super().backward(gradient)
 
     def clip_gradients(self, max_norm):
         """
@@ -373,3 +359,7 @@ class Tensor:
         # Clip if necessary
         if grad_norm > max_norm:
             self.grad = self.grad * (max_norm / (grad_norm + 1e-12))
+
+    def zero_grad(self):
+        """Reset the gradient to None."""
+        self.grad = None

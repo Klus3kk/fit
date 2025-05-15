@@ -1,11 +1,11 @@
 """
-XOR problem solver for testing basic neural network functionality.
+Basic XOR problem solver using Tanh activation.
 """
 
 import numpy as np
 
 from core.tensor import Tensor
-from nn.activations import ReLU, Tanh
+from nn.activations import Tanh
 from nn.linear import Linear
 from nn.sequential import Sequential
 from train.loss import MSELoss
@@ -13,6 +13,7 @@ from train.optim import SGD
 
 
 def solve_xor():
+    """Train a simple neural network to solve the XOR problem."""
     # Set random seed for reproducibility
     np.random.seed(42)
 
@@ -24,21 +25,18 @@ def solve_xor():
     X_tensor = Tensor(X, requires_grad=True)
     y_tensor = Tensor(y, requires_grad=False)
 
-    # Create model with special initialization for XOR
+    # Create model with proper initialization for XOR
     model = Sequential(
         Linear(2, 4),
-        Tanh(),  # Tanh often works better than ReLU for XOR
+        Tanh(),  # Tanh works better than ReLU for XOR
         Linear(4, 1)
     )
 
-    # Special initialization to break symmetry
-    # This is crucial for XOR
-    w1 = model.layers[0].weight
-    w1.data = np.array([
-        [1.0, -1.0, 1.0, -1.0],  # First input
-        [-1.0, 1.0, -1.0, 1.0]  # Second input - opposite weights
+    # Initialize weights to break symmetry
+    model.layers[0].weight.data = np.array([
+        [1.0, -1.0, 1.0, -1.0],
+        [-1.0, 1.0, -1.0, 1.0]
     ])
-
     model.layers[0].bias.data = np.array([0.0, 0.0, 1.0, 1.0])
 
     # Create loss function and optimizer

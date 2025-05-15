@@ -68,7 +68,9 @@ class TestTrainer:
         self.model = Sequential(Linear(2, 4), ReLU(), Linear(4, 2), Softmax())
 
         # Set fixed weights for deterministic testing
-        self.model.layers[0].weight.data = np.array([[0.1, 0.2, 0.3, 0.4], [0.5, 0.6, 0.7, 0.8]])
+        self.model.layers[0].weight.data = np.array(
+            [[0.1, 0.2, 0.3, 0.4], [0.5, 0.6, 0.7, 0.8]]
+        )
         self.model.layers[0].bias.data = np.array([0.1, 0.1, 0.1, 0.1])
         self.model.layers[2].weight.data = np.array(
             [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6], [0.7, 0.8]]
