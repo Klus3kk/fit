@@ -7,6 +7,10 @@ from nn.layer import Layer
 class Linear(Layer):
     def __init__(self, in_features, out_features):
         super().__init__()
+        # Store dimensions
+        self.in_features = in_features
+        self.out_features = out_features
+
         # Xavier/Glorot Initialization
         weight = np.random.randn(in_features, out_features) * (1 / np.sqrt(in_features))
         bias = np.zeros(out_features)
@@ -32,9 +36,7 @@ class Linear(Layer):
 
         for i in range(batch_size):
             for j in range(self.weight.data.shape[1]):  # output features
-                result[i, j] = (
-                    np.sum(x.data[i] * self.weight.data[:, j]) + self.bias.data[j]
-                )
+                result[i, j] = np.sum(x.data[i] * self.weight.data[:, j]) + self.bias.data[j]
 
         out = Tensor(result, requires_grad=x.requires_grad or self.weight.requires_grad)
 

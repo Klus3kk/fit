@@ -1,3 +1,7 @@
+"""
+Implementation of activation functions for neural networks.
+"""
+
 import numpy as np
 
 from core.tensor import Tensor
@@ -10,9 +14,7 @@ class ReLU(Layer):
 
         def _backward():
             if x.requires_grad:
-                grad = (x.data > 0).astype(
-                    float
-                ) * out.grad  # Multiply with upstream grad
+                grad = (x.data > 0).astype(float) * out.grad  # Multiply with upstream grad
                 x.grad = grad if x.grad is None else x.grad + grad
 
         out._backward = _backward
@@ -22,9 +24,7 @@ class ReLU(Layer):
 
 class Softmax(Layer):
     def forward(self, x: Tensor):
-        exps = np.exp(
-            x.data - np.max(x.data, axis=1, keepdims=True)
-        )  # for numerical stability
+        exps = np.exp(x.data - np.max(x.data, axis=1, keepdims=True))  # for numerical stability
         softmax = exps / np.sum(exps, axis=1, keepdims=True)
         out = Tensor(softmax, requires_grad=x.requires_grad)
 
@@ -53,9 +53,7 @@ class Dropout(Layer):
 
         # Generate dropout mask
         keep_prob = 1 - self.p
-        self.mask = (np.random.rand(*x.data.shape) < keep_prob).astype(
-            np.float32
-        ) / keep_prob
+        self.mask = (np.random.rand(*x.data.shape) < keep_prob).astype(np.float32) / keep_prob
         out = Tensor(x.data * self.mask, requires_grad=x.requires_grad)
 
         def _backward():
@@ -76,3 +74,40 @@ class Dropout(Layer):
     def get_config(self):
         """Get configuration for serialization."""
         return {"p": self.p}
+
+
+class Tanh(Layer):
+    """
+    Hyperbolic tangent (tanh) activation function.
+
+    The tanh function is defined as tanh(x) = (e^x - e^-x) / (e^x + e^-x).
+    It maps inputs to outputs in the range (-1, 1).
+    """
+
+    def forward(self, x):
+        """
+        Apply tanh activation to the input.
+
+        Args:
+            x: Input tensor
+
+        Returns:
+            Tensor with tanh activation applied
+        """
+        # Compute tanh
+        out_data = np.tanh(x.data)
+        out = Tensor(out_data, requires_grad=x.requires_grad)
+
+        def _backward():
+            if x.requires_grad:
+                # Derivative of tanh(x) is 1 - tanh(x)^2
+                grad = (1 - out_data * out_data) * out.grad
+                x.grad = grad if x.grad is None else x.grad + grad
+
+        out._backward = _backward
+        out._prev = {x}
+        return out
+
+    def get_config(self):
+        """Get configuration for serialization."""
+        return {}
