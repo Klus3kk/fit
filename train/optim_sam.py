@@ -53,14 +53,55 @@ class SAM:
                 with_grad_params.append((i, param))
                 self.param_copies[i] = param.data.copy()
 
+        # Skip if no parameters have gradients
+        if not with_grad_params:
+            return loss
+
         # Compute and normalize the gradient norm
         grad_norm = self._grad_norm(with_grad_params)
+
+        # Skip update if gradient norm is too small
+        if grad_norm < self.epsilon or np.isnan(grad_norm):
+            return loss
+
         scale = self.rho / (grad_norm + self.epsilon)
 
         # Add perturbation to the parameters by moving in the direction
         # of greatest sharpness (the gradient direction)
         for idx, param in with_grad_params:
-            param.data = param.data + scale * param.grad
+            # Make sure gradients have compatible shapes
+            if param.grad.shape != param.data.shape:
+                try:
+                    # Handle broadcasting
+                    if len(param.grad.shape) > len(param.data.shape):
+                        axes = tuple(
+                            range(len(param.grad.shape) - len(param.data.shape))
+                        )
+                        grad = np.sum(param.grad, axis=axes)
+                    else:
+                        grad = (
+                            param.grad.copy()
+                            if hasattr(param.grad, "copy")
+                            else param.grad
+                        )
+
+                    # Reshape if needed and possible
+                    if grad.shape != param.data.shape and grad.size == param.data.size:
+                        grad = grad.reshape(param.data.shape)
+
+                    # If shapes still don't match, skip
+                    if grad.shape != param.data.shape:
+                        continue
+
+                    # Apply perturbation
+                    param.data = param.data + scale * grad
+
+                except Exception as e:
+                    print(f"Error in SAM first step: {e}")
+                    continue
+            else:
+                # Shapes match, apply perturbation directly
+                param.data = param.data + scale * param.grad
 
         # Zero out gradients for the second step
         self.zero_grad()
@@ -113,7 +154,6 @@ class SAM:
             Norm of the gradients
         """
         # Compute the square sum of gradients
-        shared_device = None
         norm = 0.0
 
         for _, param in with_grad_params:
