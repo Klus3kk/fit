@@ -1,6 +1,4 @@
 """
-This is a proposed fix for the train/loss.py CrossEntropyLoss implementation.
-
 The key changes:
 1. Improved numerical stability in the softmax calculation
 2. More robust gradient computation
