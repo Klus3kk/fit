@@ -81,7 +81,9 @@ def run_sam_example():
 
         # Print progress occasionally
         if epoch % 20 == 0:
-            print(f"Epoch {epoch}/{200}: Loss = {loss.data:.4f}, Accuracy = {accuracy:.2f}")
+            print(
+                f"Epoch {epoch}/{200}: Loss = {loss.data:.4f}, Accuracy = {accuracy:.2f}"
+            )
 
     # Display final model performance
     outputs = model(X)

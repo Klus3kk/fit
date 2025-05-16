@@ -86,7 +86,9 @@ def run_sam_xor_example():
 
         # Print progress
         if epoch % 20 == 0 or accuracy == 1.0:
-            print(f"Epoch {epoch}/{300}: Loss = {loss.data:.4f}, Accuracy = {accuracy:.2f}")
+            print(
+                f"Epoch {epoch}/{300}: Loss = {loss.data:.4f}, Accuracy = {accuracy:.2f}"
+            )
 
         # Early stopping
         if accuracy == 1.0 and epoch > 50:

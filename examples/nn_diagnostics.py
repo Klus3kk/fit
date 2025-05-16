@@ -31,11 +31,7 @@ def diagnose_xor_training():
 
     # Test 1: Fully connected network with ReLU
     print("\nTest 1: Two-layer network with ReLU activation")
-    model1 = Sequential(
-        Linear(2, 4),
-        ReLU(),
-        Linear(4, 1)
-    )
+    model1 = Sequential(Linear(2, 4), ReLU(), Linear(4, 1))
     # Random initialization
     np.random.seed(42)
     model1.layers[0].weight.data = np.random.randn(2, 4) * 0.1
@@ -71,17 +67,12 @@ def diagnose_xor_training():
 
     # Test 2: Network with Tanh activation
     print("\nTest 2: Two-layer network with Tanh activation")
-    model2 = Sequential(
-        Linear(2, 4),
-        Tanh(),
-        Linear(4, 1)
-    )
+    model2 = Sequential(Linear(2, 4), Tanh(), Linear(4, 1))
     # Better initialization for Tanh
     np.random.seed(42)
-    model2.layers[0].weight.data = np.array([
-        [1.0, -1.0, 0.5, -0.5],
-        [-1.0, 1.0, -0.5, 0.5]
-    ])
+    model2.layers[0].weight.data = np.array(
+        [[1.0, -1.0, 0.5, -0.5], [-1.0, 1.0, -0.5, 0.5]]
+    )
     model2.layers[0].bias.data = np.array([0.1, 0.1, -0.1, -0.1])
 
     # Forward pass
@@ -115,11 +106,7 @@ def diagnose_xor_training():
     print("\nTest 3: Gradient check for Tanh network")
 
     # Fresh model
-    model3 = Sequential(
-        Linear(2, 2),
-        Tanh(),
-        Linear(2, 1)
-    )
+    model3 = Sequential(Linear(2, 2), Tanh(), Linear(2, 1))
 
     # One forward and backward pass
     outputs3 = model3(X_tensor)
@@ -131,7 +118,7 @@ def diagnose_xor_training():
     grad_norms = []
     for i, param in enumerate(all_params):
         if param.grad is not None:
-            grad_norm = np.sqrt(np.sum(param.grad ** 2))
+            grad_norm = np.sqrt(np.sum(param.grad**2))
             grad_norms.append(grad_norm)
             print(f"Parameter {i} gradient norm: {grad_norm:.6f}")
         else:
@@ -149,24 +136,17 @@ def diagnose_xor_training():
     print("\nTest 4: Layer-by-layer activations")
 
     # Create a model with Tanh
-    model4 = Sequential(
-        Linear(2, 3),
-        Tanh(),
-        Linear(3, 1)
-    )
+    model4 = Sequential(Linear(2, 3), Tanh(), Linear(3, 1))
 
     # Proper initialization
-    model4.layers[0].weight.data = np.array([
-        [1.0, -1.0, 0.5],
-        [-1.0, 1.0, -0.5]
-    ])
+    model4.layers[0].weight.data = np.array([[1.0, -1.0, 0.5], [-1.0, 1.0, -0.5]])
     model4.layers[0].bias.data = np.array([0.1, 0.1, -0.1])
 
     # Get first layer output (pre-activation)
     x_input = X_tensor
     first_layer_output = np.zeros((4, 3))
     for i in range(4):
-        xi = Tensor(X[i:i + 1])
+        xi = Tensor(X[i : i + 1])
         # Linear layer output before activation
         out_i = model4.layers[0](xi)
         first_layer_output[i] = out_i.data
@@ -177,7 +157,7 @@ def diagnose_xor_training():
     # Get first layer output (post-activation)
     post_activation = np.zeros((4, 3))
     for i in range(4):
-        xi = Tensor(X[i:i + 1])
+        xi = Tensor(X[i : i + 1])
         out_i = model4.layers[0](xi)
         post_i = model4.layers[1](out_i)
         post_activation[i] = post_i.data
@@ -197,7 +177,9 @@ def diagnose_xor_training():
     if len(unique_patterns) >= 3:
         print("✓ Neurons can represent XOR (at least 3 unique activation patterns)")
     else:
-        print("✗ Neurons may struggle to represent XOR (need more unique activation patterns)")
+        print(
+            "✗ Neurons may struggle to represent XOR (need more unique activation patterns)"
+        )
 
     # Summary and recommendations
     print("\n===== Diagnostic Summary =====")

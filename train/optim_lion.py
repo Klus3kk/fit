@@ -51,9 +51,7 @@ class Lion:
 
             # Compute update direction (sign-based)
             # Lion uses the sign of a weighted combination of momentum and gradient
-            update_direction = np.sign(
-                self.beta2 * self.m[i] + (1 - self.beta2) * grad
-            )
+            update_direction = np.sign(self.beta2 * self.m[i] + (1 - self.beta2) * grad)
 
             # Update parameters
             param.data = param.data - self.lr * update_direction

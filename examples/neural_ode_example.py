@@ -53,11 +53,7 @@ def run_node_example():
 
     # Define the ODE function as a neural network
     ode_func_model = Sequential(
-        Linear(2, 16),
-        Tanh(),
-        Linear(16, 16),
-        Tanh(),
-        Linear(16, 2)
+        Linear(2, 16), Tanh(), Linear(16, 16), Tanh(), Linear(16, 2)
     )
 
     # Wrap the model in an ODEFunction
@@ -69,7 +65,7 @@ def run_node_example():
         t0=0.0,
         t1=1.0 / len(t),  # Integration time is the time step in our data
         solver="rk4",
-        nsteps=10
+        nsteps=10,
     )
 
     # Create a model
@@ -136,24 +132,31 @@ def run_node_example():
 
     # Plot the original data
     plt.subplot(2, 1, 1)
-    plt.scatter(x[:, 0], x[:, 1], c=t, cmap='viridis', label='Data', s=30)
-    plt.colorbar(label='Time')
-    plt.title('Original Spiral Data')
-    plt.xlabel('x0')
-    plt.ylabel('x1')
+    plt.scatter(x[:, 0], x[:, 1], c=t, cmap="viridis", label="Data", s=30)
+    plt.colorbar(label="Time")
+    plt.title("Original Spiral Data")
+    plt.xlabel("x0")
+    plt.ylabel("x1")
     plt.legend()
 
     # Plot the learned trajectory
     plt.subplot(2, 1, 2)
-    plt.scatter(trajectory[:, 0], trajectory[:, 1], c=eval_t, cmap='viridis', label='Neural ODE', s=30)
-    plt.colorbar(label='Time')
-    plt.title('Neural ODE Learned Trajectory')
-    plt.xlabel('x0')
-    plt.ylabel('x1')
+    plt.scatter(
+        trajectory[:, 0],
+        trajectory[:, 1],
+        c=eval_t,
+        cmap="viridis",
+        label="Neural ODE",
+        s=30,
+    )
+    plt.colorbar(label="Time")
+    plt.title("Neural ODE Learned Trajectory")
+    plt.xlabel("x0")
+    plt.ylabel("x1")
     plt.legend()
 
     plt.tight_layout()
-    plt.savefig('neural_ode_spiral.png')
+    plt.savefig("neural_ode_spiral.png")
     plt.close()
 
     # Show training summary

@@ -42,11 +42,7 @@ def train_xor_with_optimizer(optimizer_name, epochs=1000, verbose=True):
     # This helps show different convergence properties
     hidden_size = 4
 
-    model = Sequential(
-        Linear(2, hidden_size),
-        Tanh(),
-        Linear(hidden_size, 1)
-    )
+    model = Sequential(Linear(2, hidden_size), Tanh(), Linear(hidden_size, 1))
 
     # Different initializations for each optimizer
     # This is critical since the same initialization leads to the same results
@@ -99,6 +95,7 @@ def train_xor_with_optimizer(optimizer_name, epochs=1000, verbose=True):
 
         # Update parameters (special case for SAM)
         if optimizer_name == "SAM":
+
             def closure():
                 outputs = model(X_tensor)
                 loss = loss_fn(outputs, y_tensor)
@@ -131,13 +128,15 @@ def train_xor_with_optimizer(optimizer_name, epochs=1000, verbose=True):
             actual = y[i][0]
             prediction = outputs[i][0]
             predicted_class = with_threshold(prediction)
-            print(f"Input: {input_data}, Predicted: {prediction:.4f} -> {predicted_class}, Actual: {actual}")
+            print(
+                f"Input: {input_data}, Predicted: {prediction:.4f} -> {predicted_class}, Actual: {actual}"
+            )
 
     return {
         "losses": losses,
         "accuracy": accuracy,
         "predictions": outputs.flatten(),
-        "optimizer": optimizer_name
+        "optimizer": optimizer_name,
     }
 
 
@@ -160,7 +159,9 @@ def compare_optimizers():
 
         # Plot loss curves
         plt.subplot(2, 1, 1)
-        plt.plot(result["losses"], label=f"{optimizer_name} (Acc: {result['accuracy']:.1f}%)")
+        plt.plot(
+            result["losses"], label=f"{optimizer_name} (Acc: {result['accuracy']:.1f}%)"
+        )
 
     # Format loss plot
     plt.subplot(2, 1, 1)
@@ -182,7 +183,7 @@ def compare_optimizers():
 
     # Add accuracy values on top of bars
     for i, acc in enumerate(accuracies):
-        plt.text(i, acc + 2, f"{acc:.1f}%", ha='center')
+        plt.text(i, acc + 2, f"{acc:.1f}%", ha="center")
 
     plt.tight_layout()
     plt.savefig("optimizer_comparison.png")

@@ -70,6 +70,16 @@ class Adam:
     def __init__(
         self, parameters, lr=0.001, betas=(0.9, 0.999), eps=1e-8, weight_decay=0
     ):
+        """
+        Initialize Adam optimizer with corrected implementation.
+        
+        Args:
+            parameters: List of parameters to optimize
+            lr: Learning rate (default: 0.001)
+            betas: Coefficients for running averages (default: (0.9, 0.999))
+            eps: Term for numerical stability (default: 1e-8)
+            weight_decay: Weight decay factor (default: 0)
+        """
         self.parameters = parameters
         self.lr = lr
         self.beta1, self.beta2 = betas
@@ -80,6 +90,18 @@ class Adam:
         self.m = [np.zeros_like(param.data) for param in parameters]
         self.v = [np.zeros_like(param.data) for param in parameters]
         self.t = 0
+        
+        # Validate parameters
+        if not 0.0 <= lr:
+            raise ValueError(f"Invalid learning rate: {lr}")
+        if not 0.0 <= eps:
+            raise ValueError(f"Invalid epsilon value: {eps}")
+        if not 0.0 <= betas[0] < 1.0:
+            raise ValueError(f"Invalid beta parameter at index 0: {betas[0]}")
+        if not 0.0 <= betas[1] < 1.0:
+            raise ValueError(f"Invalid beta parameter at index 1: {betas[1]}")
+        if not 0.0 <= weight_decay:
+            raise ValueError(f"Invalid weight_decay value: {weight_decay}")
 
     def step(self):
         self.t += 1
@@ -88,30 +110,26 @@ class Adam:
             if param.grad is None:
                 continue
 
-            grad = param.grad
+            grad = param.grad.copy()  # Copy to avoid modifying in-place
 
             # Apply weight decay
             if self.weight_decay > 0:
-                grad = grad + self.weight_decay * param.data
+                grad += self.weight_decay * param.data
 
-            # Update biased first moment estimate (momentum)
+            # Update biased first moment
             self.m[i] = self.beta1 * self.m[i] + (1 - self.beta1) * grad
+            
+            # Update biased second moment
+            self.v[i] = self.beta2 * self.v[i] + (1 - self.beta2) * (grad * grad)
 
-            # Update biased second raw moment estimate
-            # Based on the test failure, we need to ensure this matches exactly the expected values
-            # For input grad=[0.1, 0.2, 0.3], expected v=[0.001, 0.004, 0.009]
-            # This corresponds to 0.001 * grad^2 where 0.001 = (1-0.999)
-            self.v[i] = self.beta2 * self.v[i] + (1 - self.beta2) * (
-                grad * grad
-            )  # Element-wise square
+            # Correct bias
+            m_hat = self.m[i] / (1 - self.beta1 ** self.t)
+            v_hat = self.v[i] / (1 - self.beta2 ** self.t)
 
-            # Bias correction
-            m_hat = self.m[i] / (1 - self.beta1**self.t)
-            v_hat = self.v[i] / (1 - self.beta2**self.t)
-
-            # Update parameters
-            param.data = param.data - self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
+            # Update parameters (with numerical stability)
+            param.data -= self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
 
     def zero_grad(self):
+        """Clear gradients of all parameters."""
         for param in self.parameters:
             param.grad = None

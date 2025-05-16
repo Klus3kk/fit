@@ -26,18 +26,18 @@ def solve_xor():
 
     # Create model with special initialization for XOR
     model = Sequential(
-        Linear(2, 4),
-        Tanh(),  # Tanh often works better than ReLU for XOR
-        Linear(4, 1)
+        Linear(2, 4), Tanh(), Linear(4, 1)  # Tanh often works better than ReLU for XOR
     )
 
     # Special initialization to break symmetry
     # This is crucial for XOR
     w1 = model.layers[0].weight
-    w1.data = np.array([
-        [1.0, -1.0, 1.0, -1.0],  # First input
-        [-1.0, 1.0, -1.0, 1.0]  # Second input - opposite weights
-    ])
+    w1.data = np.array(
+        [
+            [1.0, -1.0, 1.0, -1.0],  # First input
+            [-1.0, 1.0, -1.0, 1.0],  # Second input - opposite weights
+        ]
+    )
 
     model.layers[0].bias.data = np.array([0.0, 0.0, 1.0, 1.0])
 
@@ -76,7 +76,9 @@ def solve_xor():
         prediction = model(x_input).data[0][0]
         predicted_class = with_threshold(prediction)
 
-        print(f"Input: {input_data}, Predicted: {prediction:.4f} -> {predicted_class}, Actual: {actual}")
+        print(
+            f"Input: {input_data}, Predicted: {prediction:.4f} -> {predicted_class}, Actual: {actual}"
+        )
 
     # Calculate accuracy
     outputs = model(X_tensor).data

@@ -17,14 +17,12 @@ from train.optim_sam import SAM
 class TestSAMOptimizer:
     def setup_method(self):
         # Create a simple model
-        self.model = Sequential(
-            Linear(2, 4),
-            ReLU(),
-            Linear(4, 1)
-        )
+        self.model = Sequential(Linear(2, 4), ReLU(), Linear(4, 1))
 
         # Set fixed weights for deterministic testing
-        self.model.layers[0].weight.data = np.array([[0.1, 0.2, 0.3, 0.4], [0.5, 0.6, 0.7, 0.8]])
+        self.model.layers[0].weight.data = np.array(
+            [[0.1, 0.2, 0.3, 0.4], [0.5, 0.6, 0.7, 0.8]]
+        )
         self.model.layers[0].bias.data = np.array([0.1, 0.1, 0.1, 0.1])
         self.model.layers[2].weight.data = np.array([[0.1, 0.2, 0.3, 0.4]])
         self.model.layers[2].bias.data = np.array([0.1])
@@ -40,11 +38,7 @@ class TestSAMOptimizer:
         self.base_optimizer = SGD(self.model.parameters(), lr=0.1)
 
         # SAM optimizer
-        self.sam_optimizer = SAM(
-            self.model.parameters(),
-            self.base_optimizer,
-            rho=0.05
-        )
+        self.sam_optimizer = SAM(self.model.parameters(), self.base_optimizer, rho=0.05)
 
     def test_sam_init(self):
         """Test SAM optimizer initialization."""
@@ -137,10 +131,15 @@ class TestSAMOptimizer:
             param.grad = np.ones_like(param.data)
 
         # Calculate expected norm manually
-        expected_norm = np.sqrt(sum(np.prod(param.data.shape) for param in self.model.parameters()))
+        expected_norm = np.sqrt(
+            sum(np.prod(param.data.shape) for param in self.model.parameters())
+        )
 
-        with_grad_params = [(i, param) for i, param in enumerate(self.model.parameters())
-                            if param.grad is not None]
+        with_grad_params = [
+            (i, param)
+            for i, param in enumerate(self.model.parameters())
+            if param.grad is not None
+        ]
 
         # Get calculated norm
         norm = self.sam_optimizer._grad_norm(with_grad_params)

@@ -85,7 +85,9 @@ class NeuralODE(Layer):
     using the specified ODE function and numerical solver.
     """
 
-    def __init__(self, ode_func, t0=0.0, t1=1.0, solver="rk4", rtol=1e-3, atol=1e-4, nsteps=100):
+    def __init__(
+        self, ode_func, t0=0.0, t1=1.0, solver="rk4", rtol=1e-3, atol=1e-4, nsteps=100
+    ):
         """
         Initialize a Neural ODE layer.
 
