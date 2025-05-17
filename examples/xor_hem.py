@@ -2,7 +2,7 @@
 Solving the XOR problem using the High Error Margin (HEM) loss.
 
 This example demonstrates how HEM loss can effectively train neural networks
-on the XOR problem, which is known to be challenging for traditional 
+on the XOR problem, which is known to be challenging for traditional
 optimization approaches.
 """
 
@@ -18,16 +18,17 @@ from train.optim import Adam
 # Import the HEM loss
 from train.hem_loss import HEMLoss
 
+
 def plot_decision_boundary(model, title="Decision Boundary"):
     """Plot the decision boundary of the trained model."""
     h = 0.01  # Step size for mesh grid
     x_min, x_max = -0.2, 1.2
     y_min, y_max = -0.2, 1.2
-    
+
     # Create mesh grid
     xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
     mesh_points = np.c_[xx.ravel(), yy.ravel()]
-    
+
     # Make predictions on mesh grid
     Z = []
     for point in mesh_points:
@@ -38,16 +39,16 @@ def plot_decision_boundary(model, title="Decision Boundary"):
         # Get prediction (greater than 0.5 is class 1)
         pred = 1 if output.data[0][0] >= 0.5 else 0
         Z.append(pred)
-    
+
     # Reshape predictions to match mesh grid
     Z = np.array(Z).reshape(xx.shape)
-    
+
     # Plot decision boundary
     plt.figure(figsize=(8, 6))
     plt.contourf(xx, yy, Z, cmap=plt.cm.RdBu, alpha=0.5)
-    
+
     # Plot training points
-    plt.scatter(X[:, 0], X[:, 1], c=y.flatten(), cmap=plt.cm.RdBu_r, edgecolors='k')
+    plt.scatter(X[:, 0], X[:, 1], c=y.flatten(), cmap=plt.cm.RdBu_r, edgecolors="k")
     plt.xlabel("X1")
     plt.ylabel("X2")
     plt.title(title)
@@ -65,11 +66,7 @@ y_tensor = Tensor(y, requires_grad=False)
 
 # Create a model with adequate capacity for XOR
 # Using Tanh activation which works well for this problem
-model = Sequential(
-    Linear(2, 8),  # Larger hidden layer
-    Tanh(),
-    Linear(8, 1)
-)
+model = Sequential(Linear(2, 8), Tanh(), Linear(8, 1))  # Larger hidden layer
 
 # Initialize weights to break symmetry
 # This helps overcome the "stuck at saddle point" problem
@@ -81,7 +78,9 @@ model.layers[0].bias.data = np.random.uniform(-0.1, 0.1, 8)
 loss_fn = HEMLoss(margin=0.5)  # Margin parameter from the paper
 
 # Create optimizer
-optimizer = Adam(model.parameters(), lr=0.03)  # Lower learning rate works better with HEM
+optimizer = Adam(
+    model.parameters(), lr=0.03
+)  # Lower learning rate works better with HEM
 
 # Training loop
 epochs = 1000

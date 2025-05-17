@@ -135,7 +135,9 @@ class NeuralODE(Layer):
 
         # Define time steps
         h = (self.t1 - self.t0) / self.nsteps
-        ts = np.arange(self.t0, self.t1 + h, h)
+        ts = np.arange(
+            self.t0, self.t1 + h / 2, h
+        )  # Add h/2 to ensure the last step is included
 
         # Integrate using the selected solver
         state = x
@@ -158,6 +160,10 @@ class NeuralODE(Layer):
         """
         result = self._integrate(x)
 
+        # Make sure result requires grad if input does
+        if x.requires_grad:
+            result.requires_grad = True
+
         def _backward():
             # This is a simplified backward pass for demonstration
             # A full implementation would use the adjoint method for efficiency
@@ -165,7 +171,14 @@ class NeuralODE(Layer):
                 # Naive backprop through the ODE solver (inefficient but works)
                 # In a full implementation, we would use the adjoint method
                 # Pass the gradient straight through for now
-                x.grad = result.grad if x.grad is None else x.grad + result.grad
+                if x.grad is None:
+                    x.grad = (
+                        result.grad.copy()
+                        if hasattr(result.grad, "copy")
+                        else result.grad
+                    )
+                else:
+                    x.grad = x.grad + result.grad
 
         result._backward = _backward
         result._prev = {x}

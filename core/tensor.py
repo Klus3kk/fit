@@ -27,7 +27,11 @@ class Tensor(Node):
         super().__init__(requires_grad=requires_grad)
 
         if not isinstance(data, np.ndarray):
-            data = np.array(data, dtype=np.float32)
+            data = np.array(data, dtype=np.float64)  # Use float64 for better precision
+        else:
+            # Ensure data is float type for gradient calculations
+            if data.dtype.kind != "f":
+                data = data.astype(np.float64)
 
         self.data = data
         self._prev = set()  # Dependencies for backward pass
@@ -147,7 +151,7 @@ class Tensor(Node):
                 grad = power * self.data ** (power - 1) * out.grad
                 self.grad = grad if self.grad is None else self.grad + grad
 
-        out.backward_fn = _backward
+        out._backward = _backward
         out._prev = {self}
         return out
 
@@ -187,7 +191,7 @@ class Tensor(Node):
                         self.grad = np.zeros_like(self.data)
                     self.grad[idx] += out.grad
 
-            out.backward_fn = _backward
+            out._backward = _backward
             out._prev = {self}
 
         return out
@@ -286,7 +290,7 @@ class Tensor(Node):
             def _backward():
                 if out.grad is not None:
                     # Create a mask for the maximum values
-                    mask = np.zeros_like(self.data)
+                    mask = np.zeros_like(self.data, dtype=np.float64)
 
                     if axis is None:
                         # Single global maximum
@@ -318,7 +322,7 @@ class Tensor(Node):
                     )
                     self.grad = grad if self.grad is None else self.grad + grad
 
-            out.backward_fn = _backward
+            out._backward = _backward
             out._prev = {self}
 
         return out

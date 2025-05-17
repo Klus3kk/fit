@@ -10,6 +10,90 @@ import numpy as np
 from typing import Tuple, Union, Callable
 
 
+def xavier_init(shape, gain=1.0):
+    """
+    Xavier/Glorot initialization - good general-purpose initialization.
+
+    Args:
+        shape: Tuple with shape of the tensor
+        gain: Scaling factor for the weights
+
+    Returns:
+        NumPy array with initialized weights
+    """
+    fan_in, fan_out = shape[0], shape[1]
+    scale = gain * np.sqrt(2.0 / (fan_in + fan_out))
+    return np.random.randn(*shape) * scale
+
+
+def he_init(shape, gain=1.0):
+    """
+    He initialization - particularly good for ReLU networks.
+
+    Args:
+        shape: Tuple with shape of the tensor
+        gain: Scaling factor for the weights
+
+    Returns:
+        NumPy array with initialized weights
+    """
+    fan_in = shape[0]
+    scale = gain * np.sqrt(2.0 / fan_in)
+    return np.random.randn(*shape) * scale
+
+
+def xor_init(shape):
+    """
+    Special initialization designed specifically for XOR problem.
+    This breaks symmetry in a way that helps XOR converge quickly.
+
+    Args:
+        shape: Tuple with shape of the tensor (in_features, out_features)
+
+    Returns:
+        NumPy array with initialized weights
+    """
+    in_features, out_features = shape
+
+    # Create weights with a pattern that breaks symmetry
+    weights = np.zeros(shape)
+
+    # Alternating pattern based on position
+    scale = 1.0
+    for i in range(out_features):
+        if i % 2 == 0:
+            weights[0, i] = scale
+            weights[1, i] = -scale
+        else:
+            weights[0, i] = -scale
+            weights[1, i] = scale
+
+    return weights
+
+
+def xor_bias_init(shape):
+    """
+    Special bias initialization for XOR problem.
+
+    Args:
+        shape: Tuple with shape of the tensor (out_features,)
+
+    Returns:
+        NumPy array with initialized biases
+    """
+    out_features = shape[0]
+    biases = np.zeros(shape)
+
+    # Alternating bias pattern
+    for i in range(out_features):
+        if i < out_features // 2:
+            biases[i] = 0.1
+        else:
+            biases[i] = -0.1
+
+    return biases
+
+
 def xavier_uniform(shape: Tuple[int, ...], gain: float = 1.0) -> np.ndarray:
     """
     Xavier/Glorot uniform initialization.

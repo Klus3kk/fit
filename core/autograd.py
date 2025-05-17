@@ -53,15 +53,32 @@ class Node:
 
         # Initialize gradient at the start node
         if gradient is None:
-            self.grad = (
-                np.ones_like(self.data) if hasattr(self, "data") else np.array(1.0)
-            )
+            if hasattr(self, "data"):
+                # Use ones with the same shape as data
+                self.grad = np.ones_like(self.data, dtype=np.float64)
+            else:
+                # Scalar gradient
+                self.grad = np.array(1.0, dtype=np.float64)
         else:
+            # Ensure gradient has the correct dtype
+            if not isinstance(gradient, np.ndarray):
+                gradient = np.array(gradient, dtype=np.float64)
+            elif gradient.dtype.kind != "f":
+                gradient = gradient.astype(np.float64)
+
             self.grad = gradient
 
         # Backpropagate through the graph in reverse topological order
         for node in reversed(topo_order):
-            node.backward_fn()
+            try:
+                node.backward_fn()
+            except Exception as e:
+                # Provide more helpful debugging info if backward fails
+                node_info = f"Node type: {type(node).__name__}"
+                if hasattr(node, "data"):
+                    node_info += f", shape: {node.data.shape}, dtype: {node.data.dtype}"
+                print(f"Error in backward for {node_info}: {e}")
+                raise
 
 
 class Function:
@@ -127,6 +144,9 @@ class Function:
             if isinstance(inp, Tensor):
                 numpy_inputs.append(inp.data)
             else:
+                # Convert non-ndarray inputs to ndarrays
+                if not isinstance(inp, np.ndarray):
+                    inp = np.array(inp, dtype=np.float64)
                 numpy_inputs.append(inp)
 
         # Apply the operation
@@ -136,8 +156,10 @@ class Function:
         output = Tensor(output_data, requires_grad=requires_grad)
 
         if requires_grad:
-            # Store references to input tensors
-            tensor_inputs = [inp for inp in inputs if isinstance(inp, Tensor)]
+            # Store references to input tensors with requires_grad=True
+            tensor_inputs = [
+                inp for inp in inputs if isinstance(inp, Tensor) and inp.requires_grad
+            ]
             output.parents = set(tensor_inputs)
 
             # Define backward function
@@ -151,27 +173,50 @@ class Function:
                 # Update gradients of input tensors
                 for tensor_input, input_grad in zip(tensor_inputs, input_grads):
                     if tensor_input.requires_grad and input_grad is not None:
-                        # Ensure gradients are properly shaped
+                        # Ensure gradients have proper dtype
+                        if not isinstance(input_grad, np.ndarray):
+                            input_grad = np.array(input_grad, dtype=np.float64)
+                        elif input_grad.dtype.kind != "f":
+                            input_grad = input_grad.astype(np.float64)
+
+                        # Ensure correct shape for broadcasting
                         if input_grad.shape != tensor_input.data.shape:
-                            # Try to handle broadcasting
-                            if tensor_input.data.ndim == input_grad.ndim:
-                                # Sum along the broadcasted dimensions
-                                axes = tuple(
-                                    i
-                                    for i, (a, b) in enumerate(
-                                        zip(tensor_input.data.shape, input_grad.shape)
+                            try:
+                                # Handle broadcasting
+                                # Sum along broadcast dimensions
+                                if input_grad.ndim > tensor_input.data.ndim:
+                                    # Sum along extra dimensions
+                                    for _ in range(
+                                        input_grad.ndim - tensor_input.data.ndim
+                                    ):
+                                        input_grad = np.sum(input_grad, axis=0)
+
+                                # For each dimension where sizes don't match
+                                for i, (a, b) in enumerate(
+                                    zip(tensor_input.data.shape, input_grad.shape)
+                                ):
+                                    if a == 1 and b > 1:
+                                        # Sum along broadcast dimensions
+                                        input_grad = np.sum(
+                                            input_grad, axis=i, keepdims=True
+                                        )
+                            except Exception as e:
+                                print(f"Broadcasting error: {e}")
+                                print(
+                                    f"Input shape: {tensor_input.data.shape}, Grad shape: {input_grad.shape}"
+                                )
+                                # If broadcasting fails, try reshape as last resort
+                                if tensor_input.data.size == input_grad.size:
+                                    input_grad = input_grad.reshape(
+                                        tensor_input.data.shape
                                     )
-                                    if a == 1 and b > 1
-                                )
-                                input_grad = np.sum(
-                                    input_grad, axis=axes, keepdims=True
-                                )
 
                         # Accumulate gradient
-                        if tensor_input.grad is None:
-                            tensor_input.grad = input_grad
-                        else:
-                            tensor_input.grad += input_grad
+                        tensor_input.grad = (
+                            input_grad
+                            if tensor_input.grad is None
+                            else tensor_input.grad + input_grad
+                        )
 
             # Set backward function
             output.backward_fn = backward_fn
@@ -184,6 +229,7 @@ class Add(Function):
 
     @staticmethod
     def apply(ctx: Dict[str, Any], a: np.ndarray, b: np.ndarray) -> np.ndarray:
+        # Store shapes for backward pass
         ctx["a_shape"] = a.shape
         ctx["b_shape"] = b.shape
         return a + b
@@ -199,45 +245,12 @@ class Add(Function):
         grad_a = grad_output
         grad_b = grad_output
 
-        # If shapes don't match, handle broadcasting for gradients
-        if a_shape != b_shape:
-            # For a: sum grad_output along dimensions where a was broadcasted
-            if len(a_shape) < len(grad_output.shape):
-                # If a has fewer dimensions, it was broadcasted to match b's dimensions
-                # Sum along the extra dimensions
-                axes = tuple(range(len(grad_output.shape) - len(a_shape)))
-                grad_a = np.sum(grad_output, axis=axes)
+        # If shapes don't match, handle broadcasting correctly
+        if a_shape != grad_output.shape:
+            grad_a = _unbroadcast(grad_output, a_shape)
 
-            # For each dimension where a was broadcasted
-            for i, (a_dim, out_dim) in enumerate(
-                zip(a_shape[::-1], grad_output.shape[::-1])
-            ):
-                if a_dim == 1 and out_dim > 1:
-                    # Sum along this dimension which was broadcasted
-                    grad_a = np.sum(
-                        grad_a, axis=len(grad_output.shape) - 1 - i, keepdims=True
-                    )
-
-            # For b: sum grad_output along dimensions where b was broadcasted
-            if len(b_shape) < len(grad_output.shape):
-                # If b has fewer dimensions, it was broadcasted to match a's dimensions
-                # Sum along the extra dimensions
-                axes = tuple(range(len(grad_output.shape) - len(b_shape)))
-                grad_b = np.sum(grad_output, axis=axes)
-
-            # For each dimension where b was broadcasted
-            for i, (b_dim, out_dim) in enumerate(
-                zip(b_shape[::-1], grad_output.shape[::-1])
-            ):
-                if b_dim == 1 and out_dim > 1:
-                    # Sum along this dimension which was broadcasted
-                    grad_b = np.sum(
-                        grad_b, axis=len(grad_output.shape) - 1 - i, keepdims=True
-                    )
-
-            # Reshape gradients back to original tensor shapes
-            grad_a = grad_a.reshape(a_shape)
-            grad_b = grad_b.reshape(b_shape)
+        if b_shape != grad_output.shape:
+            grad_b = _unbroadcast(grad_output, b_shape)
 
         return grad_a, grad_b
 
@@ -249,6 +262,8 @@ class Multiply(Function):
     def apply(ctx: Dict[str, Any], a: np.ndarray, b: np.ndarray) -> np.ndarray:
         ctx["a"] = a
         ctx["b"] = b
+        ctx["a_shape"] = a.shape
+        ctx["b_shape"] = b.shape
         return a * b
 
     @staticmethod
@@ -256,7 +271,20 @@ class Multiply(Function):
         ctx: Dict[str, Any], grad_output: np.ndarray
     ) -> Tuple[np.ndarray, np.ndarray]:
         a, b = ctx["a"], ctx["b"]
-        return grad_output * b, grad_output * a
+        a_shape, b_shape = ctx["a_shape"], ctx["b_shape"]
+
+        # Compute raw gradients first
+        grad_a = grad_output * b
+        grad_b = grad_output * a
+
+        # Handle broadcasting if needed
+        if a_shape != grad_output.shape:
+            grad_a = _unbroadcast(grad_a, a_shape)
+
+        if b_shape != grad_output.shape:
+            grad_b = _unbroadcast(grad_b, b_shape)
+
+        return grad_a, grad_b
 
 
 class MatMul(Function):
@@ -273,8 +301,26 @@ class MatMul(Function):
         ctx: Dict[str, Any], grad_output: np.ndarray
     ) -> Tuple[np.ndarray, np.ndarray]:
         a, b = ctx["a"], ctx["b"]
-        grad_a = grad_output @ b.T
-        grad_b = a.T @ grad_output
+
+        # Gradient for a: grad_output @ b.T
+        # Handle different dimensions correctly
+        if grad_output.ndim == 1 and b.ndim == 2:
+            # Vector @ matrix case
+            grad_a = grad_output.reshape(1, -1) @ b.T
+            if a.ndim == 1:
+                grad_a = grad_a.reshape(-1)
+        else:
+            grad_a = grad_output @ b.T
+
+        # Gradient for b: a.T @ grad_output
+        # Handle different dimensions correctly
+        if a.ndim == 1 and grad_output.ndim > 0:
+            # Vector @ matrix case
+            a_reshaped = a.reshape(-1, 1)
+            grad_b = a_reshaped @ grad_output.reshape(1, -1)
+        else:
+            grad_b = a.T @ grad_output
+
         return grad_a, grad_b
 
 
@@ -319,7 +365,9 @@ class Exp(Function):
 
     @staticmethod
     def apply(ctx: Dict[str, Any], a: np.ndarray) -> np.ndarray:
-        result = np.exp(a)
+        # To prevent overflow, clip very large values
+        a_safe = np.clip(a, -88, 88)  # exp(88) is close to float64 max
+        result = np.exp(a_safe)
         ctx["result"] = result
         return result
 
@@ -334,8 +382,10 @@ class Log(Function):
 
     @staticmethod
     def apply(ctx: Dict[str, Any], a: np.ndarray) -> np.ndarray:
-        ctx["input"] = a
-        return np.log(a)
+        # Add small epsilon for numerical stability
+        a_safe = np.maximum(a, 1e-12)
+        ctx["input"] = a_safe
+        return np.log(a_safe)
 
     @staticmethod
     def backward(ctx: Dict[str, Any], grad_output: np.ndarray) -> Tuple[np.ndarray,]:
@@ -386,7 +436,15 @@ class Mean(Function):
         ctx["input_shape"] = a.shape
         ctx["axis"] = axis
         ctx["keepdims"] = keepdims
-        ctx["size"] = a.size if axis is None else a.shape[axis]
+
+        # Critical fix: Handle axis=None case properly
+        if axis is None:
+            # For axis=None, use the total number of elements
+            ctx["size"] = a.size
+        else:
+            # For specified axis, use the size of that dimension
+            ctx["size"] = a.shape[axis]
+
         return np.mean(a, axis=axis, keepdims=keepdims)
 
     @staticmethod
@@ -405,10 +463,68 @@ class Mean(Function):
         else:
             grad_output_reshaped = grad_output
 
-        # Broadcast gradient to input shape and divide by the size of the reduced dimension
-        grad_input = np.broadcast_to(grad_output_reshaped, input_shape) / size
+        # Broadcast gradient to input shape and normalize
+        grad_input = (
+            np.broadcast_to(
+                (
+                    grad_output_reshaped
+                    if not np.isscalar(grad_output_reshaped)
+                    else grad_output_reshaped * np.ones(1)
+                ),
+                input_shape,
+            )
+            / size
+        )
 
         return grad_input, None, None
+
+
+class Tanh(Function):
+    """Hyperbolic tangent function."""
+
+    @staticmethod
+    def apply(ctx: Dict[str, Any], a: np.ndarray) -> np.ndarray:
+        result = np.tanh(a)
+        ctx["result"] = result
+        return result
+
+    @staticmethod
+    def backward(ctx: Dict[str, Any], grad_output: np.ndarray) -> Tuple[np.ndarray,]:
+        result = ctx["result"]
+        # Derivative of tanh(x) is (1 - tanh(x)^2)
+        return (grad_output * (1 - result * result),)
+
+
+# Helper function for unbroadcasting gradients
+def _unbroadcast(grad: np.ndarray, shape: Tuple[int, ...]) -> np.ndarray:
+    """
+    Unbroadcast a gradient to match the shape of the original tensor.
+
+    Args:
+        grad: Gradient that may have been broadcast
+        shape: Original shape to unbroadcast to
+
+    Returns:
+        Unbroadcast gradient that matches the original shape
+    """
+    # If shapes match, no need to unbroadcast
+    if grad.shape == shape:
+        return grad
+
+    # For dimensions that were added in broadcasting, sum over them
+    grad_ndim = grad.ndim
+    shape_ndim = len(shape)
+    if grad_ndim > shape_ndim:
+        # Sum over added dimensions
+        for _ in range(grad_ndim - shape_ndim):
+            grad = np.sum(grad, axis=0)
+
+    # For dimensions that were broadcast, sum over the broadcast dimension
+    for i, (original_dim, grad_dim) in enumerate(zip(shape, grad.shape)):
+        if original_dim == 1 and grad_dim > 1:
+            grad = np.sum(grad, axis=i, keepdims=True)
+
+    return grad
 
 
 # Register functions for use with the tensor class
@@ -422,6 +538,7 @@ function_registry = {
     "reshape": Reshape,
     "relu": ReLU,
     "mean": Mean,
+    "tanh": Tanh,
 }
 
 

@@ -16,7 +16,8 @@ from nn.sequential import Sequential
 from train.loss import MSELoss, CrossEntropyLoss
 from train.optim import SGD, Adam, SGDMomentum
 from train.optim_lion import Lion
-from train.hem_loss import HEMLoss  
+from train.hem_loss import HEMLoss
+
 
 def train_xor_with_optimizer(optimizer_name, epochs=2000, verbose=True, use_hem=False):
     """
@@ -101,7 +102,9 @@ def train_xor_with_optimizer(optimizer_name, epochs=2000, verbose=True, use_hem=
 
         # Print progress
         if verbose and epoch % 100 == 0:
-            print(f"{optimizer_name} - Epoch {epoch}/{epochs}, Loss: {loss.data:.4f}, Accuracy: {accuracy:.1f}%")
+            print(
+                f"{optimizer_name} - Epoch {epoch}/{epochs}, Loss: {loss.data:.4f}, Accuracy: {accuracy:.1f}%"
+            )
 
     # Final evaluation
     outputs = model(X_tensor).data
@@ -146,8 +149,10 @@ def compare_optimizers():
     for optimizer_name in optimizers:
         print(f"\nTraining with {optimizer_name}...")
         # Use HEM loss for HEM-Adam
-        use_hem = (optimizer_name == "HEM-Adam")
-        result = train_xor_with_optimizer(optimizer_name, epochs=2000, verbose=True, use_hem=use_hem)
+        use_hem = optimizer_name == "HEM-Adam"
+        result = train_xor_with_optimizer(
+            optimizer_name, epochs=2000, verbose=True, use_hem=use_hem
+        )
         results[optimizer_name] = result
 
     # Plot loss curves
@@ -159,7 +164,7 @@ def compare_optimizers():
     plt.ylabel("Loss")
     plt.legend()
     plt.grid(True)
-    
+
     # Plot accuracy curves
     plt.subplot(2, 2, 2)
     for optimizer_name, result in results.items():
@@ -183,12 +188,17 @@ def compare_optimizers():
     # Add accuracy values on top of bars
     for i, bar in enumerate(bars):
         height = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width()/2., height + 2,
-                f"{accuracies[i]:.1f}%", ha='center', va='bottom')
+        plt.text(
+            bar.get_x() + bar.get_width() / 2.0,
+            height + 2,
+            f"{accuracies[i]:.1f}%",
+            ha="center",
+            va="bottom",
+        )
 
     # Plot decision boundaries
     plt.subplot(2, 2, 4)
-    
+
     # Create a 2D meshgrid for decision boundary
     h = 0.01
     x_min, x_max = -0.2, 1.2
@@ -198,72 +208,93 @@ def compare_optimizers():
 
     # Create a colorful plot with decision boundaries for HEM and one other optimizer
     from matplotlib.colors import ListedColormap
-    
+
     # Choose which optimizer to compare with HEM
     comparison_optimizer = "Adam"
-    
+
     # Create datasets to store decision boundaries
     Z_hem = np.zeros(grid_points.shape[0])
     Z_other = np.zeros(grid_points.shape[0])
-    
+
     # Create a model and retrain to get decision boundary
     # For HEM-Adam
     model = Sequential(Linear(2, 8), Tanh(), Linear(8, 1))
     use_hem = True
-    result = train_xor_with_optimizer("HEM-Adam", epochs=2000, verbose=False, use_hem=use_hem)
-    
+    result = train_xor_with_optimizer(
+        "HEM-Adam", epochs=2000, verbose=False, use_hem=use_hem
+    )
+
     # Get decision boundary for HEM
     for i, point in enumerate(grid_points):
         x_point = Tensor(point.reshape(1, -1))
         prediction = model(x_point).data[0][0]
         Z_hem[i] = 1 if prediction >= 0.5 else 0
-    
+
     # For comparison optimizer
     model = Sequential(Linear(2, 8), Tanh(), Linear(8, 1))
     use_hem = False
-    result = train_xor_with_optimizer(comparison_optimizer, epochs=2000, verbose=False, use_hem=use_hem)
-    
+    result = train_xor_with_optimizer(
+        comparison_optimizer, epochs=2000, verbose=False, use_hem=use_hem
+    )
+
     # Get decision boundary
     for i, point in enumerate(grid_points):
         x_point = Tensor(point.reshape(1, -1))
         prediction = model(x_point).data[0][0]
         Z_other[i] = 1 if prediction >= 0.5 else 0
-    
+
     # Convert to 2D grids
     Z_hem = Z_hem.reshape(xx.shape)
     Z_other = Z_other.reshape(xx.shape)
-    
+
     # Plot the decision boundaries
-    plt.contourf(xx, yy, Z_hem, alpha=0.3, levels=[-0.5,0.5,1.5], 
-                colors=['#ff9999', '#99ccff'], label="HEM-Adam")
-    plt.contour(xx, yy, Z_other, colors=['red'], 
-                linestyles=['--'], levels=[0.5], label=comparison_optimizer)
-    
+    plt.contourf(
+        xx,
+        yy,
+        Z_hem,
+        alpha=0.3,
+        levels=[-0.5, 0.5, 1.5],
+        colors=["#ff9999", "#99ccff"],
+        label="HEM-Adam",
+    )
+    plt.contour(
+        xx,
+        yy,
+        Z_other,
+        colors=["red"],
+        linestyles=["--"],
+        levels=[0.5],
+        label=comparison_optimizer,
+    )
+
     # Plot the training points
     X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
     y = np.array([0, 1, 1, 0])
-    plt.scatter(X[:, 0], X[:, 1], c=y, cmap=plt.cm.RdBu_r, edgecolors='k')
-    
+    plt.scatter(X[:, 0], X[:, 1], c=y, cmap=plt.cm.RdBu_r, edgecolors="k")
+
     plt.title(f"Decision Boundaries: HEM vs {comparison_optimizer}")
     plt.xlabel("X1")
     plt.ylabel("X2")
-    
+
     # Add a custom legend
     from matplotlib.lines import Line2D
+
     legend_elements = [
-        Line2D([0], [0], color='blue', lw=1, label='HEM-Adam'),
-        Line2D([0], [0], color='red', linestyle='--', lw=1, label=comparison_optimizer)
+        Line2D([0], [0], color="blue", lw=1, label="HEM-Adam"),
+        Line2D([0], [0], color="red", linestyle="--", lw=1, label=comparison_optimizer),
     ]
     plt.legend(handles=legend_elements)
 
     plt.tight_layout()
     plt.savefig("optimizer_comparison.png")
-    
+
     # Generate a summary report
     print("\nOptimizer Performance Summary:")
     for opt in optimizers:
-        print(f"- {opt}: {results[opt]['final_accuracy']:.1f}% accuracy, final loss = {results[opt]['losses'][-1]:.6f}")
-    
+        print(
+            f"- {opt}: {results[opt]['final_accuracy']:.1f}% accuracy, final loss = {results[opt]['losses'][-1]:.6f}"
+        )
+
     print("\nComparison complete. See optimizer_comparison.png for results.")
 
 

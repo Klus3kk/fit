@@ -42,9 +42,9 @@ class SGD:
                     if param.grad.shape != param.data.shape:
                         param.grad = param.grad.sum(axis=0)
 
-                except BaseException:
+                except Exception as e:
                     print(
-                        f"Cannot align grad shape {param.grad.shape} with param shape {param.data.shape}"
+                        f"Cannot align grad shape {param.grad.shape} with param shape {param.data.shape}: {e}"
                     )
                     continue
 
@@ -94,8 +94,8 @@ class SGDMomentum:
                     if grad.shape != param.data.shape and grad.size == param.data.size:
                         grad = grad.reshape(param.data.shape)
 
-                except BaseException:
-                    print(f"Cannot align gradient shape for parameter {i}")
+                except Exception as e:
+                    print(f"Cannot align gradient shape for parameter {i}: {e}")
                     continue
 
             # Add weight decay
@@ -193,15 +193,15 @@ class Adam:
                             # Skip this parameter
                             continue
 
-                except BaseException:
-                    print(f"Cannot align gradient shape for parameter {i}")
+                except Exception as e:
+                    print(f"Cannot align gradient shape for parameter {i}: {e}")
                     continue
 
             # Apply weight decay
             if self.weight_decay > 0:
                 grad += self.weight_decay * param.data
 
-            # Apply gradient clipping
+            # Apply gradient clipping to prevent explosion
             if self.clip_value > 0:
                 grad = np.clip(grad, -self.clip_value, self.clip_value)
 
