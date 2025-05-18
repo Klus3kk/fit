@@ -13,8 +13,41 @@ from nn.layer import Layer
 
 class MSELoss(Layer):
     def forward(self, prediction: Tensor, target: Tensor):
+        """
+        Compute mean squared error loss manually without using problematic tensor methods.
+        """
+        # Calculate difference between prediction and target
         diff = prediction - target
-        return (diff * diff).mean()
+        
+        # Compute squared differences
+        squared_diff = diff * diff
+        
+        # Calculate mean manually
+        loss_value = np.mean(squared_diff.data)
+        
+        # Create a scalar Tensor with the loss value
+        result = Tensor(loss_value, requires_grad=prediction.requires_grad)
+        
+        # Define backward pass for gradient calculation
+        def _backward():
+            if not prediction.requires_grad or result.grad is None:
+                return
+                
+            # For MSE loss, the gradient is 2 * (prediction - target) / n
+            n_elements = np.prod(prediction.data.shape)
+            mse_grad = 2.0 * diff.data / n_elements
+            
+            # Scale by upstream gradient
+            final_grad = mse_grad * result.grad
+            
+            # Accumulate gradients
+            prediction.grad = final_grad if prediction.grad is None else prediction.grad + final_grad
+        
+        # Set up backward function and dependencies
+        result._backward = _backward
+        result._prev = {prediction}
+        
+        return result
 
 
 class CrossEntropyLoss(Layer):

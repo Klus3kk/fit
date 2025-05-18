@@ -219,7 +219,7 @@ class Tensor(Node):
         sum_fn = get_function("sum")
         return sum_fn.forward(self, axis, keepdims)
 
-    def mean(self, axis=None, keepdims=False):
+    def mean(self, axis=None, keepdims=False): # sorry, no autograd for this one
         """
         Calculate the mean of tensor elements along specified axis.
 
@@ -230,9 +230,76 @@ class Tensor(Node):
         Returns:
             A new tensor containing the mean value
         """
-        # Use the Mean function from autograd
-        mean_fn = get_function("mean")
-        return mean_fn.forward(self, axis, keepdims)
+        # Direct implementation that bypasses the Function framework
+        # Simply calculate the mean using numpy
+        result_data = np.mean(self.data, axis=axis, keepdims=keepdims)
+        
+        # Create output tensor
+        out = Tensor(result_data, requires_grad=self.requires_grad)
+        
+        # Define gradient calculation for backward pass
+        if self.requires_grad:
+            def _backward():
+                if out.grad is None:
+                    return
+                    
+                # Calculate gradient
+                # For mean operation, gradient is 1/n for each element
+                input_shape = self.data.shape
+                
+                # Initialize gradient with correct shape
+                grad = np.zeros_like(self.data)
+                
+                # Create properly shaped output gradient
+                if not keepdims and axis is not None:
+                    # Need to reshape gradient to match input shape
+                    grad_shape = list(input_shape)
+                    
+                    # Convert axis to list for easier handling
+                    axes = [axis] if isinstance(axis, (int, np.integer)) else axis
+                    
+                    # For each reduced axis, set corresponding dimension to 1
+                    if axes is not None:
+                        try:
+                            for ax in axes:
+                                if isinstance(ax, (int, np.integer)):
+                                    grad_shape[ax] = 1
+                        except (TypeError, ValueError):
+                            # If iteration fails, handle as scalar
+                            grad_shape = [1] * len(input_shape)
+                    
+                    # Reshape gradient
+                    reshaped_grad = np.reshape(out.grad, grad_shape)
+                    
+                    # Calculate number of elements that were averaged
+                    n = 1
+                    if axes is not None:
+                        try:
+                            for ax in axes:
+                                if isinstance(ax, (int, np.integer)):
+                                    n *= input_shape[ax]
+                        except (TypeError, ValueError):
+                            # If calculation fails, use total size
+                            n = self.data.size
+                    else:
+                        n = self.data.size
+                    
+                    # Fill gradient
+                    grad = np.ones_like(self.data) * reshaped_grad / n
+                    
+                else:
+                    # Simple case - axis is None or keepdims is True
+                    n = self.data.size if axis is None else np.prod([self.data.shape[i] for i in (axis if isinstance(axis, (list, tuple)) else [axis])])
+                    grad = np.ones_like(self.data) * out.grad / n
+                
+                # Update gradient
+                self.grad = grad if self.grad is None else self.grad + grad
+                    
+            # Set up backward function and dependencies
+            out._backward = _backward
+            out._prev = {self}
+        
+        return out
 
     def exp(self):
         """
