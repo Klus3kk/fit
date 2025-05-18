@@ -1,11 +1,9 @@
-
 import numpy as np
 import os
 import matplotlib.pyplot as plt
 from sklearn.datasets import fetch_openml
 
 from core.tensor import Tensor
-from monitor.tracker import TrainingTracker
 from nn.activations import ReLU, Softmax
 from nn.linear import Linear
 from nn.model_io import load_model, save_model
@@ -86,11 +84,11 @@ def train_and_evaluate_mnist():
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
-    # Create a simpler model with proper initialization
+    # Create a simple model with proper initialization
     model = Sequential(
         Linear(784, 128),
         ReLU(),
-        Linear(128, 10)
+        Linear(128, 10),
     )
 
     # Use proper initialization for the layers
@@ -110,7 +108,7 @@ def train_and_evaluate_mnist():
 
     # Create loss function and optimizer
     loss_fn = CrossEntropyLoss()
-    optimizer = Adam(model.parameters(), lr=0.01)  # Higher learning rate
+    optimizer = Adam(model.parameters(), lr=0.001)  # Lower learning rate
 
     # Training parameters
     epochs = 15
@@ -120,8 +118,11 @@ def train_and_evaluate_mnist():
     train_accs = []
     val_losses = []
     val_accs = []
+    
+    # Gradient clipping threshold
+    grad_clip_threshold = 1.0
 
-    # Training loop with direct parameter updates
+    # Training loop with gradient clipping
     print("\nStarting training...")
     for epoch in range(1, epochs + 1):
         # Training phase
@@ -138,13 +139,21 @@ def train_and_evaluate_mnist():
             # Backward pass
             loss.backward()
             
+            # Apply gradient clipping
+            for param in model.parameters():
+                if param.grad is not None:
+                    # Calculate gradient norm
+                    grad_norm = np.sqrt(np.sum(param.grad * param.grad))
+                    if grad_norm > grad_clip_threshold:
+                        param.grad = param.grad * (grad_clip_threshold / grad_norm)
+            
             # Update parameters
             optimizer.step()
             optimizer.zero_grad()
             
             # Update metrics
             batch_size = x.data.shape[0]
-            total_loss += loss.data * batch_size
+            total_loss += float(loss.data) * batch_size
             
             # For accuracy calculation
             predictions = np.argmax(outputs.data, axis=1)
@@ -174,7 +183,7 @@ def train_and_evaluate_mnist():
             
             # Update metrics
             batch_size = x.data.shape[0]
-            val_total_loss += loss.data * batch_size
+            val_total_loss += float(loss.data) * batch_size
             
             # For accuracy calculation
             predictions = np.argmax(outputs.data, axis=1)

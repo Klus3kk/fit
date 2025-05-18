@@ -429,49 +429,30 @@ class Mean(Function):
     @staticmethod
     def apply(ctx, a, axis=None, keepdims=False):
         """
-        Compute mean along specified axes. Simplified implementation to avoid edge cases.
+        Compute mean along specified axes.
         """
         # Store original shape for backward
         ctx["input_shape"] = a.shape
+        ctx["axis"] = axis
         ctx["keepdims"] = keepdims
         
         # Calculate result
         result = np.mean(a, axis=axis, keepdims=keepdims)
         
-        # For backward pass, we need to know how many elements were averaged
+        # Store size for backward pass
         if axis is None:
             # If axis is None, we're averaging over all elements
-            divisor = a.size
+            ctx["size"] = a.size
         else:
             # Otherwise, we're averaging over specific axes
-            # This approach avoids the problematic indexing
-            divisor = 1
-            shape = a.shape
-            
-            # Handle different types of axis
-            if isinstance(axis, (list, tuple, np.ndarray)):
-                try:
-                    # Try to iterate through axis
-                    for ax in axis:
-                        if isinstance(ax, (int, np.integer)):
-                            divisor *= shape[ax]
-                except (TypeError, ValueError):
-                    # If iteration fails, fall back to total size
-                    divisor = a.size
-            elif isinstance(axis, (int, np.integer, float)):
-                # Single axis - convert to int safely
-                try:
-                    ax = int(axis)
-                    divisor = shape[ax]
-                except (TypeError, ValueError, IndexError):
-                    # If conversion fails, fall back to total size
-                    divisor = a.size
+            size = 1
+            # Handle different types of axis specifications
+            if isinstance(axis, (list, tuple)):
+                for ax in axis:
+                    size *= a.shape[ax]
             else:
-                # Unknown type, fall back to size
-                divisor = a.size
-        
-        # Store the divisor for backward
-        ctx["divisor"] = divisor
+                size *= a.shape[axis]
+            ctx["size"] = size
         
         return result
 
@@ -481,25 +462,29 @@ class Mean(Function):
         Compute gradient for mean operation.
         """
         input_shape = ctx["input_shape"]
+        axis = ctx["axis"]
         keepdims = ctx["keepdims"]
-        divisor = ctx["divisor"]
+        size = ctx["size"]
         
         # If keepdims is False, we need to reshape grad_output
-        if not keepdims and grad_output.ndim < len(input_shape):
-            # Create a new shape with 1s in reduced dimensions
-            grad_shape = list(grad_output.shape)
+        if not keepdims and axis is not None:
+            # Need to reshape grad_output to broadcast correctly
+            grad_shape = list(input_shape)
             
-            # Add dimensions to match input_shape
-            while len(grad_shape) < len(input_shape):
-                grad_shape.insert(0, 1)
+            # Handle different axis specifications
+            if isinstance(axis, (list, tuple)):
+                for ax in axis:
+                    grad_shape[ax] = 1
+            else:
+                grad_shape[axis] = 1
                 
+            # Reshape grad_output
             grad_output = grad_output.reshape(grad_shape)
         
-        # Broadcast to input shape and divide by number of elements
-        grad_input = np.ones(input_shape) * grad_output / divisor
+        # Gradient of mean is 1/N for each element
+        grad_input = np.ones(input_shape) * grad_output / size
         
         return grad_input, None, None
-
 
 
 class Tanh(Function):
