@@ -5,6 +5,5 @@ fit.egg-info
 .venv
 .idea
 venv
-data 
 mnist_model.pkl
 *.png
