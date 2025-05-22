@@ -101,7 +101,7 @@ for epoch in range(num_epochs):
     squared_diff = diff * diff
     total_loss = np.sum(squared_diff.data)  # Use numpy directly
     loss_value = total_loss / squared_diff.data.size
-    
+
     # Create a scalar tensor for loss
     loss = Tensor(loss_value, requires_grad=True)
     losses.append(loss_value)
@@ -109,26 +109,26 @@ for epoch in range(num_epochs):
     # Manual backward computation - bypass autograd
     # For MSE loss: derivative is 2*(pred-target)/n
     output_grad = 2.0 * diff.data / diff.data.size
-    
+
     # Gradient through sigmoid: sigmoid'(x) = sigmoid(x) * (1 - sigmoid(x))
     sigmoid_grad = outputs.data * (1 - outputs.data) * output_grad
-    
+
     # Gradient through W2: h1_act.T @ sigmoid_grad
     W2_grad = h1_act.data.T @ sigmoid_grad
     # Gradient through b2: sum of sigmoid_grad along batch dimension
     b2_grad = np.sum(sigmoid_grad, axis=0)
-    
+
     # Gradient through h1_act: sigmoid_grad @ W2.T
     h1_act_grad = sigmoid_grad @ W2.data.T
-    
+
     # Gradient through tanh: tanh'(x) = 1 - tanh(x)^2
     tanh_grad = (1 - h1_act.data**2) * h1_act_grad
-    
+
     # Gradient through W1: X.T @ tanh_grad
     W1_grad = X_tensor.data.T @ tanh_grad
     # Gradient through b1: sum of tanh_grad along batch dimension
     b1_grad = np.sum(tanh_grad, axis=0)
-    
+
     # Ensure gradients exist (assign manually instead of relying on autograd)
     W1.grad = W1_grad
     b1.grad = b1_grad

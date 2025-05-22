@@ -27,13 +27,13 @@ def train_xor_with_optimizer(optimizer_name, epochs=2000, verbose=True, use_hem=
     input_size = 2
     hidden_size = 8
     output_size = 1
-    
+
     # Initialize weights with the pattern that works for XOR
     W1 = np.random.randn(input_size, hidden_size) * 0.1
     b1 = np.zeros(hidden_size)
     W2 = np.random.randn(hidden_size, output_size) * 0.1
     b2 = np.zeros(output_size)
-    
+
     # Better initialization for XOR
     for i in range(hidden_size):
         if i % 2 == 0:
@@ -42,21 +42,21 @@ def train_xor_with_optimizer(optimizer_name, epochs=2000, verbose=True, use_hem=
         else:
             W1[0, i] = -0.5
             W1[1, i] = 0.5
-        
+
         if i < hidden_size // 2:
             b1[i] = 0.1
         else:
             b1[i] = -0.1
-    
+
     # Convert to tensors
     W1_tensor = Tensor(W1, requires_grad=True)
     b1_tensor = Tensor(b1, requires_grad=True)
     W2_tensor = Tensor(W2, requires_grad=True)
     b2_tensor = Tensor(b2, requires_grad=True)
-    
+
     # Parameters list
     params = [W1_tensor, b1_tensor, W2_tensor, b2_tensor]
-    
+
     # Create optimizer
     if optimizer_name == "SGD":
         optimizer = SGD(params, lr=0.1)
@@ -70,30 +70,30 @@ def train_xor_with_optimizer(optimizer_name, epochs=2000, verbose=True, use_hem=
         optimizer = Adam(params, lr=0.03)
     else:
         raise ValueError(f"Unknown optimizer: {optimizer_name}")
-    
+
     # Loss function
     if use_hem and optimizer_name == "HEM-Adam":
         loss_fn = HEMLoss(margin=0.5)
     else:
         loss_fn = MSELoss()
-    
+
     # Training loop
     losses = []
     accuracies = []
-    
+
     X_tensor = Tensor(X, requires_grad=False)
     y_tensor = Tensor(y, requires_grad=False)
-    
+
     for epoch in range(1, epochs + 1):
         # Manual forward pass
         # First layer
         z1 = X_tensor @ W1_tensor + b1_tensor
         a1 = Tensor(np.tanh(z1.data), requires_grad=True)  # Tanh activation
-        
+
         # Second layer
         z2 = a1 @ W2_tensor + b2_tensor
         outputs = Tensor(1.0 / (1.0 + np.exp(-z2.data)), requires_grad=True)  # Sigmoid
-        
+
         # Compute loss manually
         if use_hem and optimizer_name == "HEM-Adam":
             loss = loss_fn(outputs, y_tensor)
@@ -102,58 +102,60 @@ def train_xor_with_optimizer(optimizer_name, epochs=2000, verbose=True, use_hem=
             diff = outputs - y_tensor
             squared_diff = diff * diff
             loss_value = float(np.mean(squared_diff.data))
-            
+
         losses.append(loss_value)
-        
+
         # Compute gradients manually
         # For MSE loss: gradient wrt output is 2 * (output - target) / n
         n = X.shape[0]
         d_loss_d_output = 2.0 * (outputs.data - y_tensor.data) / n
-        
+
         # Gradient through sigmoid: sigmoid'(x) = sigmoid(x) * (1 - sigmoid(x))
         d_z2 = d_loss_d_output * outputs.data * (1 - outputs.data)
-        
+
         # Gradients for the second layer
         d_W2 = a1.data.T @ d_z2
         d_b2 = np.sum(d_z2, axis=0)
         d_a1 = d_z2 @ W2_tensor.data.T
-        
+
         # Gradient through tanh: tanh'(x) = 1 - tanh(x)^2
         d_z1 = d_a1 * (1 - a1.data**2)
-        
+
         # Gradients for the first layer
         d_W1 = X_tensor.data.T @ d_z1
         d_b1 = np.sum(d_z1, axis=0)
-        
+
         # Set computed gradients
         W1_tensor.grad = d_W1
         b1_tensor.grad = d_b1
         W2_tensor.grad = d_W2
         b2_tensor.grad = d_b2
-        
+
         # Update parameters
         optimizer.step()
         optimizer.zero_grad()
-        
+
         # Compute accuracy
         predictions = (outputs.data > 0.5).astype(int)
         accuracy = np.mean(predictions == y) * 100
         accuracies.append(accuracy)
-        
+
         # Print progress
         if verbose and epoch % 100 == 0:
-            print(f"{optimizer_name} - Epoch {epoch}/{epochs}, Loss: {loss_value:.4f}, Accuracy: {accuracy:.1f}%")
-    
+            print(
+                f"{optimizer_name} - Epoch {epoch}/{epochs}, Loss: {loss_value:.4f}, Accuracy: {accuracy:.1f}%"
+            )
+
     # Final evaluation
     # Forward pass
     z1 = X_tensor @ W1_tensor + b1_tensor
     a1 = Tensor(np.tanh(z1.data), requires_grad=False)
     z2 = a1 @ W2_tensor + b2_tensor
     outputs = Tensor(1.0 / (1.0 + np.exp(-z2.data)), requires_grad=False)
-    
+
     predictions = (outputs.data > 0.5).astype(int)
     accuracy = np.mean(predictions == y) * 100
-    
+
     if verbose:
         print(f"\n{optimizer_name} final accuracy: {accuracy:.2f}%")
         print("Predictions vs. Actual:")
@@ -162,8 +164,10 @@ def train_xor_with_optimizer(optimizer_name, epochs=2000, verbose=True, use_hem=
             actual = y[i][0]
             prediction = outputs.data[i][0]
             predicted_class = 1 if prediction >= 0.5 else 0
-            print(f"Input: {input_data}, Predicted: {prediction:.4f} -> {predicted_class}, Actual: {actual}")
-    
+            print(
+                f"Input: {input_data}, Predicted: {prediction:.4f} -> {predicted_class}, Actual: {actual}"
+            )
+
     return {
         "losses": losses,
         "accuracies": accuracies,
@@ -261,7 +265,9 @@ def compare_optimizers():
             Z_hem[i] = 1 if np.random.rand() > 0.5 else 0
 
         Z_hem = Z_hem.reshape(xx.shape)
-        plt.contourf(xx, yy, Z_hem, alpha=0.3, levels=[-0.5, 0.5, 1.5], label="HEM-Adam")
+        plt.contourf(
+            xx, yy, Z_hem, alpha=0.3, levels=[-0.5, 0.5, 1.5], label="HEM-Adam"
+        )
 
     # Plot Adam decision boundary
     if adam_result["final_accuracy"] > 50:  # Only if it learned something
@@ -272,7 +278,15 @@ def compare_optimizers():
             Z_adam[i] = 1 if np.random.rand() > 0.5 else 0
 
         Z_adam = Z_adam.reshape(xx.shape)
-        plt.contour(xx, yy, Z_adam, colors=["red"], linestyles=["--"], levels=[0.5], label=comparison_optimizer)
+        plt.contour(
+            xx,
+            yy,
+            Z_adam,
+            colors=["red"],
+            linestyles=["--"],
+            levels=[0.5],
+            label=comparison_optimizer,
+        )
 
     # Plot the training points
     plt.scatter(X[:, 0], X[:, 1], c=y.flatten(), cmap=plt.cm.RdBu_r, edgecolors="k")
@@ -297,5 +311,5 @@ if __name__ == "__main__":
     # XOR problem data - defined globally for the decision boundary plot
     X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
     y = np.array([[0], [1], [1], [0]])
-    
+
     compare_optimizers()

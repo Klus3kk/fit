@@ -435,10 +435,10 @@ class Mean(Function):
         ctx["input_shape"] = a.shape
         ctx["axis"] = axis
         ctx["keepdims"] = keepdims
-        
+
         # Calculate result
         result = np.mean(a, axis=axis, keepdims=keepdims)
-        
+
         # Store size for backward pass
         if axis is None:
             # If axis is None, we're averaging over all elements
@@ -453,7 +453,7 @@ class Mean(Function):
             else:
                 size *= a.shape[axis]
             ctx["size"] = size
-        
+
         return result
 
     @staticmethod
@@ -465,25 +465,25 @@ class Mean(Function):
         axis = ctx["axis"]
         keepdims = ctx["keepdims"]
         size = ctx["size"]
-        
+
         # If keepdims is False, we need to reshape grad_output
         if not keepdims and axis is not None:
             # Need to reshape grad_output to broadcast correctly
             grad_shape = list(input_shape)
-            
+
             # Handle different axis specifications
             if isinstance(axis, (list, tuple)):
                 for ax in axis:
                     grad_shape[ax] = 1
             else:
                 grad_shape[axis] = 1
-                
+
             # Reshape grad_output
             grad_output = grad_output.reshape(grad_shape)
-        
+
         # Gradient of mean is 1/N for each element
         grad_input = np.ones(input_shape) * grad_output / size
-        
+
         return grad_input, None, None
 
 
