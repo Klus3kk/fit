@@ -1,9 +1,9 @@
 # Example implementation for train/engine.py
 from typing import Any, Callable, Dict, Optional
 
-from monitor.tracker import TrainingTracker
-from train.trainer import Trainer
-from utils.data import DataLoader
+from fit.monitor.tracker import TrainingTracker
+from fit.simple.trainer import Trainer
+from fit.data import DataLoader
 
 
 def train_epoch(model, dataloader, loss_fn, optimizer, device=None):

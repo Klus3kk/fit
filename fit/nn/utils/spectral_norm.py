@@ -12,8 +12,9 @@ Paper: https://arxiv.org/abs/1802.05957
 import numpy as np
 from typing import List, Optional, Tuple, Union
 
-from core.tensor import Tensor
-from nn.layer import Layer
+from fit.core.tensor import Tensor
+from fit.nn.modules.base import Layer
+from fit.nn.modules.linear import Linear
 
 
 class SpectralNorm:
@@ -237,8 +238,6 @@ class SpectralNormLinear(SpectralNormLayer):
             n_power_iterations: Number of power iterations
             eps: Numerical stability constant
         """
-        from nn.linear import Linear
-
         # Create regular Linear layer
         linear = Linear(in_features, out_features)
 

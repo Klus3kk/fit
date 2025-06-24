@@ -16,12 +16,12 @@ import numpy as np
 import math
 from typing import Optional, Tuple, List
 
-from core.tensor import Tensor
-from nn.modules.base import Layer
-from nn.modules.linear import Linear
-from nn.modules.activation import ReLU, GELU, Dropout
-from nn.modules.normalization import LayerNorm
-from attention_core import (
+from fit.core.tensor import Tensor
+from fit.nn.modules.base import Layer
+from fit.nn.modules.linear import Linear
+from fit.nn.modules.activation import ReLU, GELU, Dropout
+from fit.nn.modules.normalization import LayerNorm
+from fit.attention_core import (
     MultiHeadAttention,
     SelfAttention,
     CrossAttention,

@@ -8,14 +8,15 @@ and providing accurate gradients for all optimizers.
 import matplotlib.pyplot as plt
 import numpy as np
 
-from fit.core.tensor import Tensor
-from fit.nn.activations import Tanh
-from fit.nn.linear import Linear
-from fit.nn.sequential import Sequential
-from fit.train.loss import MSELoss
-from fit.train.optim import SGD, Adam, SGDMomentum
-from fit.train.optim_lion import Lion
-from fit.train.optim_sam import SAM
+from fit.core import Tensor
+from fit.nn.modules import Tanh
+from fit.nn.modules import Linear
+from fit.nn.modules.base import Layer
+from fit.simple import Sequential
+from fit.loss import MSELoss
+from fit.optim import SGD, Adam, SGDMomentum
+from fit.optim.experimental import Lion
+from fit.optim.experimental import SAM
 
 
 def train_xor_with_optimizer(optimizer_name, epochs=2000, verbose=True):

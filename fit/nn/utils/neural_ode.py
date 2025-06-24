@@ -17,8 +17,8 @@ https://arxiv.org/abs/1806.07366
 import numpy as np
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
-from core.tensor import Tensor
-from nn.layer import Layer
+from fit.core.tensor import Tensor
+from fit.nn.modules.base import Layer
 
 
 class ODEFunction:
@@ -526,8 +526,8 @@ class ContinuousNormalization(Layer):
         super().__init__()
 
         # Create the ODE function model
-        from nn.linear import Linear
-        from nn.activations import Tanh
+        from fit.nn.modules.linear import Linear
+        from fit.nn.modules.activation import Tanh
 
         layers = []
 
@@ -548,7 +548,7 @@ class ContinuousNormalization(Layer):
         layers.append(Linear(prev_dim, dim))
 
         # Create Sequential model
-        from nn.sequential import Sequential
+        from fit.simple import Sequential
 
         dynamics_network = Sequential(*layers)
 

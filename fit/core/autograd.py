@@ -7,6 +7,7 @@ for efficient backpropagation.
 
 import numpy as np
 from typing import Dict, List, Set, Callable, Optional, Tuple, Any, Union
+from fit.core.tensor import Tensor
 
 
 class Node:

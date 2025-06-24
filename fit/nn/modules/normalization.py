@@ -1,7 +1,7 @@
 import numpy as np
 
-from core.tensor import Tensor
-from nn.layer import Layer
+from fit.core.tensor import Tensor
+from fit.nn.modules.base import Layer
 
 
 class BatchNorm(Layer):
