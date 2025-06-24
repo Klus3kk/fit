@@ -1,8 +1,6 @@
 import numpy as np
 
 
-
-
 class DataLoader:
     """Iterable data loader similar to PyTorch's DataLoader."""
 

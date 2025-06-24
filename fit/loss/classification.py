@@ -3,6 +3,7 @@ import numpy as np
 from core.tensor import Tensor
 from nn.modules.base import Layer
 
+
 class CrossEntropyLoss(Layer):
     """
     Cross Entropy loss for classification tasks.

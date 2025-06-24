@@ -50,4 +50,3 @@ class MSELoss(Layer):
         result._prev = {prediction}
 
         return result
-

@@ -75,9 +75,10 @@ class Tensor(Node):
         # Convert scalar to tensor if needed
         if not isinstance(other, Tensor):
             other = Tensor(other)
-            
+
         # Use the Multiply function from autograd
         from core.autograd import Multiply
+
         return Multiply.forward(self, other)
 
     def __rmul__(self, other):

@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class SGD:
     def __init__(self, parameters, lr=0.01, clip_value=5.0):
         self.parameters = parameters
