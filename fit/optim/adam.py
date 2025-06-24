@@ -1,108 +1,348 @@
+"""
+Adam optimizer implementation.
+"""
+
 import numpy as np
+from typing import List
+from fit.core.tensor import Tensor
 
 
 class Adam:
+    """
+    Adam optimizer with bias correction.
+
+    Combines the advantages of AdaGrad and RMSProp.
+    Maintains moving averages of both gradients and squared gradients.
+    """
+
     def __init__(
         self,
-        parameters,
-        lr=0.001,
-        betas=(0.9, 0.999),
-        eps=1e-8,
-        weight_decay=0,
-        clip_value=5.0,
+        parameters: List[Tensor],
+        lr: float = 0.001,
+        betas: tuple = (0.9, 0.999),
+        eps: float = 1e-8,
+        weight_decay: float = 0.0,
     ):
         """
-        Initialize Adam optimizer with robust implementation.
+        Initialize Adam optimizer.
 
         Args:
             parameters: List of parameters to optimize
-            lr: Learning rate (default: 0.001)
-            betas: Coefficients for running averages (default: (0.9, 0.999))
-            eps: Term for numerical stability (default: 1e-8)
-            weight_decay: Weight decay factor (default: 0)
-            clip_value: Maximum gradient value for clipping (default: 5.0)
+            lr: Learning rate
+            betas: Coefficients for computing running averages (beta1, beta2)
+            eps: Small constant for numerical stability
+            weight_decay: L2 penalty coefficient
         """
         self.parameters = parameters
         self.lr = lr
         self.beta1, self.beta2 = betas
         self.eps = eps
         self.weight_decay = weight_decay
-        self.clip_value = clip_value
 
-        # Initialize momentum and velocity
-        self.m = [np.zeros_like(param.data) for param in parameters]
-        self.v = [np.zeros_like(param.data) for param in parameters]
-        self.t = 0
-
-        # Validate parameters
-        if not 0.0 <= lr:
-            raise ValueError(f"Invalid learning rate: {lr}")
-        if not 0.0 <= eps:
-            raise ValueError(f"Invalid epsilon value: {eps}")
-        if not 0.0 <= betas[0] < 1.0:
-            raise ValueError(f"Invalid beta parameter at index 0: {betas[0]}")
-        if not 0.0 <= betas[1] < 1.0:
-            raise ValueError(f"Invalid beta parameter at index 1: {betas[1]}")
-        if not 0.0 <= weight_decay:
-            raise ValueError(f"Invalid weight_decay value: {weight_decay}")
+        # Initialize state
+        self.state = {}
+        for i, param in enumerate(parameters):
+            self.state[i] = {
+                "m": np.zeros_like(param.data),  # First moment
+                "v": np.zeros_like(param.data),  # Second moment
+                "step": 0,
+            }
 
     def step(self):
-        self.t += 1
-
+        """Perform one optimization step."""
         for i, param in enumerate(self.parameters):
             if param.grad is None:
                 continue
 
-            # Copy to avoid modifying in-place
-            grad = param.grad.copy() if hasattr(param.grad, "copy") else param.grad
+            grad = param.grad
+            state = self.state[i]
 
-            # Handle shape mismatch if needed
-            if grad.shape != param.data.shape:
-                try:
-                    # Handle broadcasting
-                    if len(grad.shape) > len(param.data.shape):
-                        axes = tuple(range(len(grad.shape) - len(param.data.shape)))
-                        grad = np.sum(grad, axis=axes)
+            # Add weight decay
+            if self.weight_decay != 0:
+                grad = grad + self.weight_decay * param.data
 
-                    # If shapes still don't match, try other dimension reductions
-                    if grad.shape != param.data.shape:
-                        grad = np.sum(grad, axis=0)
+            # Update step count
+            state["step"] += 1
 
-                    # Reshape if needed
-                    if grad.shape != param.data.shape:
-                        # Last resort: try to reshape (if same number of elements)
-                        if grad.size == param.data.size:
-                            grad = grad.reshape(param.data.shape)
-                        else:
-                            # Skip this parameter
-                            continue
+            # Update biased first moment estimate
+            state["m"] = self.beta1 * state["m"] + (1 - self.beta1) * grad
 
-                except Exception as e:
-                    print(f"Cannot align gradient shape for parameter {i}: {e}")
-                    continue
+            # Update biased second raw moment estimate
+            state["v"] = self.beta2 * state["v"] + (1 - self.beta2) * grad * grad
 
-            # Apply weight decay
-            if self.weight_decay > 0:
-                grad += self.weight_decay * param.data
+            # Compute bias-corrected first moment estimate
+            m_hat = state["m"] / (1 - self.beta1 ** state["step"])
 
-            # Apply gradient clipping to prevent explosion
-            if self.clip_value > 0:
-                grad = np.clip(grad, -self.clip_value, self.clip_value)
+            # Compute bias-corrected second raw moment estimate
+            v_hat = state["v"] / (1 - self.beta2 ** state["step"])
 
-            # Update biased first moment
-            self.m[i] = self.beta1 * self.m[i] + (1 - self.beta1) * grad
-
-            # Update biased second moment
-            self.v[i] = self.beta2 * self.v[i] + (1 - self.beta2) * (grad * grad)
-
-            # Correct bias
-            m_hat = self.m[i] / (1 - self.beta1**self.t)
-            v_hat = self.v[i] / (1 - self.beta2**self.t)
-
-            # Update parameters (with numerical stability)
-            param.data -= self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
+            # Update parameters
+            param.data = param.data - self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
 
     def zero_grad(self):
-        """Clear gradients of all parameters."""
+        """Zero all parameter gradients."""
+        for param in self.parameters:
+            param.grad = None
+
+    def state_dict(self):
+        """Return optimizer state."""
+        return {
+            "lr": self.lr,
+            "betas": (self.beta1, self.beta2),
+            "eps": self.eps,
+            "weight_decay": self.weight_decay,
+            "state": self.state,
+        }
+
+    def load_state_dict(self, state_dict):
+        """Load optimizer state."""
+        self.lr = state_dict["lr"]
+        self.beta1, self.beta2 = state_dict["betas"]
+        self.eps = state_dict["eps"]
+        self.weight_decay = state_dict["weight_decay"]
+        self.state = state_dict["state"]
+
+
+class AdamW:
+    """
+    AdamW optimizer with decoupled weight decay.
+
+    Implements the weight decay fix from "Decoupled Weight Decay Regularization".
+    """
+
+    def __init__(
+        self,
+        parameters: List[Tensor],
+        lr: float = 0.001,
+        betas: tuple = (0.9, 0.999),
+        eps: float = 1e-8,
+        weight_decay: float = 0.01,
+    ):
+        """
+        Initialize AdamW optimizer.
+
+        Args:
+            parameters: List of parameters to optimize
+            lr: Learning rate
+            betas: Coefficients for computing running averages (beta1, beta2)
+            eps: Small constant for numerical stability
+            weight_decay: Weight decay coefficient (decoupled)
+        """
+        self.parameters = parameters
+        self.lr = lr
+        self.beta1, self.beta2 = betas
+        self.eps = eps
+        self.weight_decay = weight_decay
+
+        # Initialize state
+        self.state = {}
+        for i, param in enumerate(parameters):
+            self.state[i] = {
+                "m": np.zeros_like(param.data),  # First moment
+                "v": np.zeros_like(param.data),  # Second moment
+                "step": 0,
+            }
+
+    def step(self):
+        """Perform one optimization step."""
+        for i, param in enumerate(self.parameters):
+            if param.grad is None:
+                continue
+
+            grad = param.grad
+            state = self.state[i]
+
+            # Update step count
+            state["step"] += 1
+
+            # Update biased first moment estimate
+            state["m"] = self.beta1 * state["m"] + (1 - self.beta1) * grad
+
+            # Update biased second raw moment estimate
+            state["v"] = self.beta2 * state["v"] + (1 - self.beta2) * grad * grad
+
+            # Compute bias-corrected first moment estimate
+            m_hat = state["m"] / (1 - self.beta1 ** state["step"])
+
+            # Compute bias-corrected second raw moment estimate
+            v_hat = state["v"] / (1 - self.beta2 ** state["step"])
+
+            # Update parameters with decoupled weight decay
+            param.data = param.data - self.lr * (
+                m_hat / (np.sqrt(v_hat) + self.eps) + self.weight_decay * param.data
+            )
+
+    def zero_grad(self):
+        """Zero all parameter gradients."""
+        for param in self.parameters:
+            param.grad = None
+
+    def state_dict(self):
+        """Return optimizer state."""
+        return {
+            "lr": self.lr,
+            "betas": (self.beta1, self.beta2),
+            "eps": self.eps,
+            "weight_decay": self.weight_decay,
+            "state": self.state,
+        }
+
+    def load_state_dict(self, state_dict):
+        """Load optimizer state."""
+        self.lr = state_dict["lr"]
+        self.beta1, self.beta2 = state_dict["betas"]
+        self.eps = state_dict["eps"]
+        self.weight_decay = state_dict["weight_decay"]
+        self.state = state_dict["state"]
+
+
+class Adamax:
+    """
+    Adamax optimizer (variant of Adam based on infinity norm).
+    """
+
+    def __init__(
+        self,
+        parameters: List[Tensor],
+        lr: float = 0.002,
+        betas: tuple = (0.9, 0.999),
+        eps: float = 1e-8,
+        weight_decay: float = 0.0,
+    ):
+        """
+        Initialize Adamax optimizer.
+
+        Args:
+            parameters: List of parameters to optimize
+            lr: Learning rate
+            betas: Coefficients for computing running averages (beta1, beta2)
+            eps: Small constant for numerical stability
+            weight_decay: L2 penalty coefficient
+        """
+        self.parameters = parameters
+        self.lr = lr
+        self.beta1, self.beta2 = betas
+        self.eps = eps
+        self.weight_decay = weight_decay
+
+        # Initialize state
+        self.state = {}
+        for i, param in enumerate(parameters):
+            self.state[i] = {
+                "m": np.zeros_like(param.data),  # First moment
+                "u": np.zeros_like(param.data),  # Infinity norm
+                "step": 0,
+            }
+
+    def step(self):
+        """Perform one optimization step."""
+        for i, param in enumerate(self.parameters):
+            if param.grad is None:
+                continue
+
+            grad = param.grad
+            state = self.state[i]
+
+            # Add weight decay
+            if self.weight_decay != 0:
+                grad = grad + self.weight_decay * param.data
+
+            # Update step count
+            state["step"] += 1
+
+            # Update biased first moment estimate
+            state["m"] = self.beta1 * state["m"] + (1 - self.beta1) * grad
+
+            # Update infinity norm
+            state["u"] = np.maximum(self.beta2 * state["u"], np.abs(grad))
+
+            # Compute bias-corrected first moment estimate
+            m_hat = state["m"] / (1 - self.beta1 ** state["step"])
+
+            # Update parameters
+            param.data = param.data - self.lr * m_hat / (state["u"] + self.eps)
+
+    def zero_grad(self):
+        """Zero all parameter gradients."""
+        for param in self.parameters:
+            param.grad = None
+
+
+class NAdam:
+    """
+    NAdam optimizer (Nesterov-accelerated Adam).
+    """
+
+    def __init__(
+        self,
+        parameters: List[Tensor],
+        lr: float = 0.002,
+        betas: tuple = (0.9, 0.999),
+        eps: float = 1e-8,
+        weight_decay: float = 0.0,
+    ):
+        """
+        Initialize NAdam optimizer.
+
+        Args:
+            parameters: List of parameters to optimize
+            lr: Learning rate
+            betas: Coefficients for computing running averages (beta1, beta2)
+            eps: Small constant for numerical stability
+            weight_decay: L2 penalty coefficient
+        """
+        self.parameters = parameters
+        self.lr = lr
+        self.beta1, self.beta2 = betas
+        self.eps = eps
+        self.weight_decay = weight_decay
+
+        # Initialize state
+        self.state = {}
+        for i, param in enumerate(parameters):
+            self.state[i] = {
+                "m": np.zeros_like(param.data),  # First moment
+                "v": np.zeros_like(param.data),  # Second moment
+                "step": 0,
+            }
+
+    def step(self):
+        """Perform one optimization step."""
+        for i, param in enumerate(self.parameters):
+            if param.grad is None:
+                continue
+
+            grad = param.grad
+            state = self.state[i]
+
+            # Add weight decay
+            if self.weight_decay != 0:
+                grad = grad + self.weight_decay * param.data
+
+            # Update step count
+            state["step"] += 1
+
+            # Update biased first moment estimate
+            state["m"] = self.beta1 * state["m"] + (1 - self.beta1) * grad
+
+            # Update biased second raw moment estimate
+            state["v"] = self.beta2 * state["v"] + (1 - self.beta2) * grad * grad
+
+            # Compute bias-corrected first moment estimate
+            m_hat = state["m"] / (1 - self.beta1 ** state["step"])
+
+            # Compute bias-corrected second raw moment estimate
+            v_hat = state["v"] / (1 - self.beta2 ** state["step"])
+
+            # Nesterov acceleration
+            m_nesterov = self.beta1 * m_hat + (1 - self.beta1) * grad / (
+                1 - self.beta1 ** state["step"]
+            )
+
+            # Update parameters
+            param.data = param.data - self.lr * m_nesterov / (np.sqrt(v_hat) + self.eps)
+
+    def zero_grad(self):
+        """Zero all parameter gradients."""
         for param in self.parameters:
             param.grad = None

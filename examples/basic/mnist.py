@@ -3,14 +3,15 @@ import os
 import matplotlib.pyplot as plt
 from sklearn.datasets import fetch_openml
 
-from core.tensor import Tensor
-from nn.activations import ReLU, Softmax
-from nn.linear import Linear
-from nn.model_io import load_model, save_model
-from nn.sequential import Sequential
-from train.loss import CrossEntropyLoss
-from train.optim import Adam
-from utils.data import DataLoader, Dataset
+from fit.core.tensor import Tensor
+from fit.nn.modules.activation import ReLU, Softmax
+from fit.nn.modules.linear import Linear
+from fit.nn.utils.model_io import load_model, save_model
+from fit.nn.modules.container import Sequential
+from fit.loss.classification import CrossEntropyLoss
+from fit.optim.adam import Adam
+from fit.data.dataset import Dataset
+from fit.data.dataloader import DataLoader
 
 
 def load_mnist_data(path="./data/mnist"):
@@ -57,248 +58,244 @@ def train_and_evaluate_mnist():
     Train and evaluate a model on MNIST with careful parameter handling
     to ensure proper learning.
     """
-    print("Loading MNIST dataset...")
+    # Load data
+    X_train, y_train, X_test, y_test = load_mnist_data()
 
-    # Load MNIST data
-    train_images, train_labels, test_images, test_labels = load_mnist_data()
+    # Use a subset for faster training in this example
+    subset_size = 5000
+    train_indices = np.random.choice(len(X_train), subset_size, replace=False)
+    X_train_subset = X_train[train_indices]
+    y_train_subset = y_train[train_indices]
 
-    # Use a small subset for faster training
-    subset_size = 10000
-    val_size = 2000
+    # Take smaller test set too
+    test_subset_size = 1000
+    test_indices = np.random.choice(len(X_test), test_subset_size, replace=False)
+    X_test_subset = X_test[test_indices]
+    y_test_subset = y_test[test_indices]
 
-    # Create random indices for train/val split
-    np.random.seed(42)  # For reproducibility
-    indices = np.random.permutation(len(train_images))
-    train_idx, val_idx = indices[val_size : subset_size + val_size], indices[:val_size]
-
-    # Create train/val splits
-    train_data = train_images[train_idx]
-    train_targets = train_labels[train_idx]
-    val_data = train_images[val_idx]
-    val_targets = train_labels[val_idx]
-
-    print(f"Training data shape: {train_data.shape}")
-    print(f"Validation data shape: {val_data.shape}")
-
-    # Create datasets
-    train_dataset = Dataset(train_data, train_targets)
-    val_dataset = Dataset(val_data, val_targets)
-
-    # Create dataloaders
-    batch_size = 64
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-
-    # Create a simple model with proper initialization
-    model = Sequential(
-        Linear(784, 128),
-        ReLU(),
-        Linear(128, 10),
+    print(
+        f"Using {len(X_train_subset)} training samples and {len(X_test_subset)} test samples"
     )
 
-    # Use proper initialization for the layers
-    # Xavier/Glorot initialization for the first layer
-    w1_scale = np.sqrt(2.0 / (784 + 128))
-    model.layers[0].weight.data = np.random.randn(784, 128) * w1_scale
-    model.layers[0].bias.data = np.zeros(128)
+    # Create model: 784 -> 128 -> 64 -> 10
+    model = Sequential(
+        Linear(784, 128), ReLU(), Linear(128, 64), ReLU(), Linear(64, 10), Softmax()
+    )
 
-    # Xavier/Glorot initialization for the second layer
-    w2_scale = np.sqrt(2.0 / (128 + 10))
-    model.layers[2].weight.data = np.random.randn(128, 10) * w2_scale
-    model.layers[2].bias.data = np.zeros(10)
+    print("Model architecture:")
+    print("784 (input) -> 128 -> ReLU -> 64 -> ReLU -> 10 -> Softmax (output)")
 
-    # Print model summary
-    print("\nModel architecture:")
-    model.summary((784,))
+    # Create dataset and dataloader
+    train_dataset = Dataset(X_train_subset, y_train_subset)
+    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
 
     # Create loss function and optimizer
-    loss_fn = CrossEntropyLoss()
-    optimizer = Adam(model.parameters(), lr=0.001)  # Lower learning rate
+    criterion = CrossEntropyLoss()
+    optimizer = Adam(model.parameters(), lr=0.001)
 
-    # Training parameters
-    epochs = 15
+    print(f"\nStarting training with batch size 32...")
 
-    # Track metrics
+    # Training loop
+    epochs = 10
     train_losses = []
-    train_accs = []
-    val_losses = []
-    val_accs = []
 
-    # Gradient clipping threshold
-    grad_clip_threshold = 1.0
+    for epoch in range(epochs):
+        epoch_loss = 0.0
+        batch_count = 0
 
-    # Training loop with gradient clipping
-    print("\nStarting training...")
-    for epoch in range(1, epochs + 1):
-        # Training phase
-        model.train()
-        total_loss = 0
-        correct = 0
-        total = 0
+        for batch_idx, (batch_x, batch_y) in enumerate(train_loader):
+            # Zero gradients
+            for param in model.parameters():
+                param.grad = None
 
-        for x, y in train_loader:
             # Forward pass
-            outputs = model(x)
-            loss = loss_fn(outputs, y)
+            output = model(batch_x)
+            loss = criterion(output, batch_y)
 
             # Backward pass
-            loss.backward()
+            try:
+                loss.backward()
+                optimizer.step()
 
-            # Apply gradient clipping
-            for param in model.parameters():
-                if param.grad is not None:
-                    # Calculate gradient norm
-                    grad_norm = np.sqrt(np.sum(param.grad * param.grad))
-                    if grad_norm > grad_clip_threshold:
-                        param.grad = param.grad * (grad_clip_threshold / grad_norm)
+                epoch_loss += loss.data
+                batch_count += 1
 
-            # Update parameters
-            optimizer.step()
-            optimizer.zero_grad()
+                # Print progress every 20 batches
+                if batch_idx % 20 == 0:
+                    print(
+                        f"Epoch {epoch+1}/{epochs}, Batch {batch_idx}, Loss: {loss.data:.4f}"
+                    )
 
-            # Update metrics
-            batch_size = x.data.shape[0]
-            total_loss += float(loss.data) * batch_size
+            except Exception as e:
+                print(f"Error in training: {e}")
+                return False
 
-            # For accuracy calculation
-            predictions = np.argmax(outputs.data, axis=1)
-            y_indices = (
-                y.data.astype(np.int32)
-                if y.data.ndim == 1
-                else np.argmax(y.data, axis=1)
-            )
-            batch_correct = np.sum(predictions == y_indices)
+        # Calculate average loss for the epoch
+        avg_loss = epoch_loss / batch_count
+        train_losses.append(avg_loss)
 
-            correct += batch_correct
-            total += batch_size
+        print(f"Epoch {epoch+1}/{epochs} completed. Average Loss: {avg_loss:.4f}")
 
-        # Calculate epoch metrics
-        train_loss = total_loss / total
-        train_accuracy = correct / total
+        # Evaluate on a small subset every few epochs
+        if (epoch + 1) % 3 == 0:
+            accuracy = evaluate_model(model, X_test_subset[:100], y_test_subset[:100])
+            print(f"Test Accuracy (100 samples): {accuracy:.2%}")
 
-        train_losses.append(train_loss)
-        train_accs.append(train_accuracy)
+    # Final evaluation
+    print("\nFinal evaluation on test set...")
+    final_accuracy = evaluate_model(model, X_test_subset, y_test_subset)
+    print(f"Final Test Accuracy: {final_accuracy:.2%}")
 
-        # Validation phase
-        model.eval()
-        val_total_loss = 0
-        val_correct = 0
-        val_total = 0
-
-        for x, y in val_loader:
-            # Forward pass (no backward needed)
-            outputs = model(x)
-            loss = loss_fn(outputs, y)
-
-            # Update metrics
-            batch_size = x.data.shape[0]
-            val_total_loss += float(loss.data) * batch_size
-
-            # For accuracy calculation
-            predictions = np.argmax(outputs.data, axis=1)
-            y_indices = (
-                y.data.astype(np.int32)
-                if y.data.ndim == 1
-                else np.argmax(y.data, axis=1)
-            )
-            batch_correct = np.sum(predictions == y_indices)
-
-            val_correct += batch_correct
-            val_total += batch_size
-
-        # Calculate validation metrics
-        val_loss = val_total_loss / val_total
-        val_accuracy = val_correct / val_total
-
-        val_losses.append(val_loss)
-        val_accs.append(val_accuracy)
-
-        # Print progress
-        print(
-            f"Epoch {epoch}/{epochs}: "
-            f"Train Loss: {train_loss:.4f}, Train Acc: {train_accuracy*100:.2f}%, "
-            f"Val Loss: {val_loss:.4f}, Val Acc: {val_accuracy*100:.2f}%"
-        )
-
-    # Plot training metrics
-    plt.figure(figsize=(12, 5))
-
-    plt.subplot(1, 2, 1)
-    plt.plot(train_losses, label="Train Loss")
-    plt.plot(val_losses, label="Val Loss")
-    plt.title("Loss")
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.legend()
-
-    plt.subplot(1, 2, 2)
-    plt.plot(train_accs, label="Train Accuracy")
-    plt.plot(val_accs, label="Val Accuracy")
-    plt.title("Accuracy")
-    plt.xlabel("Epoch")
-    plt.ylabel("Accuracy")
-    plt.legend()
-
-    plt.tight_layout()
-    plt.savefig("mnist_training_metrics.png")
-    print("\nTraining plot saved to mnist_training_metrics.png")
-
-    # Save model
+    # Save the model
     model_path = "mnist_model.pkl"
     save_model(model, model_path)
-    print(f"\nModel saved to {model_path}")
+    print(f"Model saved to {model_path}")
 
-    # Evaluate on test set
-    test_subset_size = 1000
-    test_indices = np.random.choice(len(test_images), test_subset_size, replace=False)
-    test_data = test_images[test_indices]
-    test_labels = test_labels[test_indices]
+    # Plot training loss
+    try:
+        plt.figure(figsize=(10, 4))
 
-    test_dataset = Dataset(test_data, test_labels)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+        plt.subplot(1, 2, 1)
+        plt.plot(train_losses)
+        plt.title("Training Loss")
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.grid(True)
 
-    # Calculate test accuracy
-    model.eval()
-    test_correct = 0
-    test_total = 0
+        # Show some test predictions
+        plt.subplot(1, 2, 2)
+        show_predictions(model, X_test_subset[:16], y_test_subset[:16])
 
-    for x, y in test_loader:
-        outputs = model(x)
-        predictions = np.argmax(outputs.data, axis=1)
-        y_indices = (
-            y.data.astype(np.int32) if y.data.ndim == 1 else np.argmax(y.data, axis=1)
-        )
-        batch_correct = np.sum(predictions == y_indices)
+        plt.tight_layout()
+        plt.savefig("mnist_results.png", dpi=150, bbox_inches="tight")
+        plt.show()
 
-        test_correct += batch_correct
-        test_total += len(predictions)
+        print("Results saved as 'mnist_results.png'")
+    except Exception as e:
+        print(f"Could not generate plot: {e}")
 
-    test_accuracy = test_correct / test_total
-    print(f"\nTest accuracy: {test_accuracy*100:.2f}%")
+    return final_accuracy > 0.7  # Return True if we got at least 70% accuracy
 
-    # Calculate per-class accuracy
-    class_correct = np.zeros(10)
-    class_total = np.zeros(10)
 
-    for x, y in test_loader:
-        outputs = model(x)
-        predictions = np.argmax(outputs.data, axis=1)
-        y_indices = (
-            y.data.astype(np.int32) if y.data.ndim == 1 else np.argmax(y.data, axis=1)
-        )
+def evaluate_model(model, X_test, y_test):
+    """
+    Evaluate the model on test data.
 
-        for i, label in enumerate(y_indices):
-            class_total[label] += 1
-            if predictions[i] == label:
-                class_correct[label] += 1
+    Args:
+        model: Trained model
+        X_test: Test features
+        y_test: Test labels
 
-    print("\nPer-class accuracy:")
-    for i in range(10):
-        if class_total[i] > 0:
-            print(f"Digit {i}: {100 * class_correct[i] / class_total[i]:.2f}% accuracy")
+    Returns:
+        Accuracy as a float
+    """
+    correct = 0
+    total = len(X_test)
 
-    print("\nMNIST example completed successfully!")
+    for i in range(total):
+        # Get single sample
+        x = Tensor([X_test[i]], requires_grad=False)
+
+        # Get prediction
+        output = model(x)
+        predicted = np.argmax(output.data)
+        actual = y_test[i]
+
+        if predicted == actual:
+            correct += 1
+
+    accuracy = correct / total
+    return accuracy
+
+
+def show_predictions(model, X_samples, y_true, num_samples=16):
+    """
+    Show model predictions on sample images.
+
+    Args:
+        model: Trained model
+        X_samples: Sample images
+        y_true: True labels
+        num_samples: Number of samples to show
+    """
+    plt.figure(figsize=(12, 8))
+
+    for i in range(min(num_samples, len(X_samples))):
+        plt.subplot(4, 4, i + 1)
+
+        # Reshape image for display
+        image = X_samples[i].reshape(28, 28)
+        plt.imshow(image, cmap="gray")
+
+        # Get prediction
+        x = Tensor([X_samples[i]], requires_grad=False)
+        output = model(x)
+        predicted = np.argmax(output.data)
+        actual = y_true[i]
+
+        # Set title with prediction
+        color = "green" if predicted == actual else "red"
+        plt.title(f"Pred: {predicted}, True: {actual}", color=color)
+        plt.axis("off")
+
+    plt.suptitle("MNIST Predictions (Green=Correct, Red=Wrong)")
+
+
+def demo_saved_model():
+    """
+    Demonstrate loading a saved model and making predictions.
+    """
+    model_path = "mnist_model.pkl"
+
+    if not os.path.exists(model_path):
+        print(f"Model file {model_path} not found. Please train a model first.")
+        return
+
+    print("Loading saved model...")
+
+    try:
+        # Load the model
+        model = load_model(model_path)
+        print("Model loaded successfully!")
+
+        # Load some test data
+        _, _, X_test, y_test = load_mnist_data()
+
+        # Test on a few samples
+        print("\nTesting loaded model:")
+        for i in range(5):
+            x = Tensor([X_test[i]], requires_grad=False)
+            output = model(x)
+            predicted = np.argmax(output.data)
+            confidence = np.max(output.data)
+            actual = y_test[i]
+
+            print(
+                f"Sample {i}: Predicted {predicted} (confidence: {confidence:.3f}), Actual: {actual}"
+            )
+
+    except Exception as e:
+        print(f"Error loading model: {e}")
 
 
 if __name__ == "__main__":
-    train_and_evaluate_mnist()
+    print("MNIST Classification Example")
+    print("=" * 40)
+
+    # Ask user what to do
+    choice = input("Enter 1 to train new model, 2 to test saved model, or 3 for both: ")
+
+    if choice in ["1", "3"]:
+        print("\nTraining new model...")
+        success = train_and_evaluate_mnist()
+
+        if success:
+            print("\n🎉 MNIST training completed successfully!")
+        else:
+            print("\n❌ MNIST training failed")
+
+    if choice in ["2", "3"]:
+        print("\nTesting saved model...")
+        demo_saved_model()
+
+    print("\nExample completed!")

@@ -1,8 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from core.tensor import Tensor
-import core.ops as ops
+from fit.core.tensor import Tensor
+import fit.core.ops as ops
 
 
 def plot_decision_boundary(

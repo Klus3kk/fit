@@ -4,8 +4,8 @@ Implementation of activation functions for neural networks.
 
 import numpy as np
 
-from core.tensor import Tensor
-from nn.modules.base import Layer
+from fit.core.tensor import Tensor
+from fit.nn.modules.base import Layer
 
 
 class ReLU(Layer):
@@ -31,50 +31,147 @@ class Softmax(Layer):
 
         Args:
             x: Input tensor
-            axis: Dimension along which to apply softmax (default: -1)
+            axis: Axis along which to apply softmax
 
         Returns:
-            Tensor with softmax applied
+            Softmax output
         """
-        # Step 1: Improve numerical stability by subtracting max
-        # This prevents overflow in exp() calculation
-        x_max = np.max(x.data, axis=axis, keepdims=True)
-        shifted_data = x.data - x_max
+        # Numerically stable softmax
+        x_max = Tensor(np.max(x.data, axis=axis, keepdims=True))
+        x_shifted = x - x_max
+        exp_x = x_shifted.exp()
+        sum_exp = Tensor(np.sum(exp_x.data, axis=axis, keepdims=True))
 
-        # Step 2: Compute exp() and normalize
-        exp_values = np.exp(shifted_data)
-        summed_exp = np.sum(exp_values, axis=axis, keepdims=True)
-        softmax_output = exp_values / (summed_exp + 1e-12)  # Add epsilon for stability
+        out = exp_x / sum_exp
 
-        # Create output tensor
-        out = Tensor(softmax_output, requires_grad=x.requires_grad)
-
-        # Define backward pass for computing gradients
         def _backward():
             if x.requires_grad and out.grad is not None:
-                # Calculate Jacobian-vector product for softmax
-                # For each sample i and each class j:
-                # ∂softmax_j/∂x_i = softmax_j * (δ_ij - softmax_i)
-                # Where δ_ij is 1 if i=j and 0 otherwise
+                # Softmax gradient: softmax * (grad - (softmax * grad).sum())
+                s = out.data
+                grad_sum = np.sum(out.grad * s, axis=axis, keepdims=True)
+                grad = s * (out.grad - grad_sum)
+                x.grad = grad if x.grad is None else x.grad + grad
 
-                # Initialize gradient
-                x_grad = np.zeros_like(x.data)
+        out._backward = _backward
+        out._prev = {x}
+        return out
 
-                # Process each sample
-                for i in range(len(x.data)):
-                    # Get softmax output and upstream gradient for this sample
-                    s = softmax_output[i]
-                    g = out.grad[i]
 
-                    # Calculate diag(s) - outer(s, s)
-                    # This can be computed efficiently as: s * (g - s·g)
-                    s_g_dot = np.sum(s * g)
-                    x_grad[i] = s * g - s * s_g_dot
+class Tanh(Layer):
+    def forward(self, x):
+        out = Tensor(np.tanh(x.data), requires_grad=x.requires_grad)
 
-                # Set gradient
-                x.grad = x_grad if x.grad is None else x.grad + x_grad
+        def _backward():
+            if x.requires_grad and out.grad is not None:
+                # Derivative of tanh is 1 - tanh^2
+                grad = out.grad * (1 - out.data * out.data)
+                x.grad = grad if x.grad is None else x.grad + grad
 
-        # Setup backward function and dependencies
+        out._backward = _backward
+        out._prev = {x}
+        return out
+
+
+class Sigmoid(Layer):
+    def forward(self, x):
+        # Numerically stable sigmoid
+        out_data = np.where(
+            x.data >= 0,
+            1 / (1 + np.exp(-x.data)),
+            np.exp(x.data) / (1 + np.exp(x.data)),
+        )
+        out = Tensor(out_data, requires_grad=x.requires_grad)
+
+        def _backward():
+            if x.requires_grad and out.grad is not None:
+                # Derivative of sigmoid is sigmoid * (1 - sigmoid)
+                grad = out.grad * out.data * (1 - out.data)
+                x.grad = grad if x.grad is None else x.grad + grad
+
+        out._backward = _backward
+        out._prev = {x}
+        return out
+
+
+class LeakyReLU(Layer):
+    def __init__(self, negative_slope=0.01):
+        super().__init__()
+        self.negative_slope = negative_slope
+
+    def forward(self, x):
+        out_data = np.where(x.data > 0, x.data, self.negative_slope * x.data)
+        out = Tensor(out_data, requires_grad=x.requires_grad)
+
+        def _backward():
+            if x.requires_grad and out.grad is not None:
+                grad = np.where(x.data > 0, 1.0, self.negative_slope) * out.grad
+                x.grad = grad if x.grad is None else x.grad + grad
+
+        out._backward = _backward
+        out._prev = {x}
+        return out
+
+
+class ELU(Layer):
+    def __init__(self, alpha=1.0):
+        super().__init__()
+        self.alpha = alpha
+
+    def forward(self, x):
+        out_data = np.where(x.data > 0, x.data, self.alpha * (np.exp(x.data) - 1))
+        out = Tensor(out_data, requires_grad=x.requires_grad)
+
+        def _backward():
+            if x.requires_grad and out.grad is not None:
+                grad = np.where(x.data > 0, 1.0, out.data + self.alpha) * out.grad
+                x.grad = grad if x.grad is None else x.grad + grad
+
+        out._backward = _backward
+        out._prev = {x}
+        return out
+
+
+class GELU(Layer):
+    def forward(self, x):
+        # Gaussian Error Linear Unit: x * 0.5 * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x^3)))
+        sqrt_2_over_pi = np.sqrt(2.0 / np.pi)
+        cdf = 0.5 * (1.0 + np.tanh(sqrt_2_over_pi * (x.data + 0.044715 * x.data**3)))
+        out_data = x.data * cdf
+        out = Tensor(out_data, requires_grad=x.requires_grad)
+
+        def _backward():
+            if x.requires_grad and out.grad is not None:
+                # Approximate GELU derivative
+                tanh_arg = sqrt_2_over_pi * (x.data + 0.044715 * x.data**3)
+                tanh_val = np.tanh(tanh_arg)
+                sech2 = 1 - tanh_val**2
+
+                grad = 0.5 * (1 + tanh_val) + x.data * 0.5 * sech2 * sqrt_2_over_pi * (
+                    1 + 3 * 0.044715 * x.data**2
+                )
+                grad = grad * out.grad
+                x.grad = grad if x.grad is None else x.grad + grad
+
+        out._backward = _backward
+        out._prev = {x}
+        return out
+
+
+class Swish(Layer):
+    def forward(self, x):
+        # Swish: x * sigmoid(x)
+        sigmoid_data = 1 / (1 + np.exp(-np.clip(x.data, -88, 88)))
+        out_data = x.data * sigmoid_data
+        out = Tensor(out_data, requires_grad=x.requires_grad)
+
+        def _backward():
+            if x.requires_grad and out.grad is not None:
+                # Derivative: sigmoid + x * sigmoid * (1 - sigmoid)
+                sigmoid_val = 1 / (1 + np.exp(-np.clip(x.data, -88, 88)))
+                grad = sigmoid_val + x.data * sigmoid_val * (1 - sigmoid_val)
+                grad = grad * out.grad
+                x.grad = grad if x.grad is None else x.grad + grad
+
         out._backward = _backward
         out._prev = {x}
         return out
@@ -84,23 +181,20 @@ class Dropout(Layer):
     def __init__(self, p=0.5):
         super().__init__()
         self.p = p
-        self.mask = None
-        self.training = True  # toggle for train/eval modes
+        self.training = True
 
-    def forward(self, x: Tensor):
-        if not self.training or self.p == 0.0:
+    def forward(self, x):
+        if not self.training or self.p == 0:
             return x
 
-        # Generate dropout mask
-        keep_prob = 1 - self.p
-        self.mask = (np.random.rand(*x.data.shape) < keep_prob).astype(
-            np.float32
-        ) / keep_prob
-        out = Tensor(x.data * self.mask, requires_grad=x.requires_grad)
+        # Create dropout mask
+        mask = np.random.binomial(1, 1 - self.p, x.data.shape) / (1 - self.p)
+        out_data = x.data * mask
+        out = Tensor(out_data, requires_grad=x.requires_grad)
 
         def _backward():
             if x.requires_grad and out.grad is not None:
-                grad = self.mask * out.grad
+                grad = out.grad * mask
                 x.grad = grad if x.grad is None else x.grad + grad
 
         out._backward = _backward
@@ -113,43 +207,36 @@ class Dropout(Layer):
     def eval(self):
         self.training = False
 
-    def get_config(self):
-        """Get configuration for serialization."""
-        return {"p": self.p}
 
-
-class Tanh(Layer):
-    """
-    Hyperbolic tangent (tanh) activation function.
-
-    The tanh function is defined as tanh(x) = (e^x - e^-x) / (e^x + e^-x).
-    It maps inputs to outputs in the range (-1, 1).
-    """
-
-    def forward(self, x):
+class LogSoftmax(Layer):
+    def forward(self, x: Tensor, axis=-1):
         """
-        Apply tanh activation to the input.
+        Apply log-softmax function along specified axis.
 
         Args:
             x: Input tensor
+            axis: Axis along which to apply log-softmax
 
         Returns:
-            Tensor with tanh activation applied
+            Log-softmax output
         """
-        # Compute tanh using numpy for stability
-        out_data = np.tanh(x.data)
-        out = Tensor(out_data, requires_grad=x.requires_grad)
+        # Numerically stable log-softmax: x - logsumexp(x)
+        x_max = Tensor(np.max(x.data, axis=axis, keepdims=True))
+        x_shifted = x - x_max
+        exp_x = x_shifted.exp()
+        sum_exp = Tensor(np.sum(exp_x.data, axis=axis, keepdims=True))
+        log_sum_exp = sum_exp.log() + x_max
+
+        out = x - log_sum_exp
 
         def _backward():
             if x.requires_grad and out.grad is not None:
-                # Derivative of tanh(x) is 1 - tanh(x)^2
-                grad = (1 - out_data * out_data) * out.grad
+                # Log-softmax gradient: grad - softmax * grad.sum()
+                softmax = exp_x / sum_exp
+                grad_sum = np.sum(out.grad, axis=axis, keepdims=True)
+                grad = out.grad - softmax.data * grad_sum
                 x.grad = grad if x.grad is None else x.grad + grad
 
         out._backward = _backward
         out._prev = {x}
         return out
-
-    def get_config(self):
-        """Get configuration for serialization."""
-        return {}

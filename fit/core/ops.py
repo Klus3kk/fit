@@ -8,8 +8,8 @@ to provide higher-level functionality.
 import numpy as np
 from typing import List, Optional, Tuple, Union
 
-from core.autograd import Function, get_function
-from core.tensor import Tensor
+from fit.core.autograd import Function, get_function
+from fit.core.tensor import Tensor
 
 
 # Matrix Operations

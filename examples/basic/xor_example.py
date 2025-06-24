@@ -8,11 +8,11 @@ the problematic mean operation in the MSELoss function.
 import numpy as np
 import matplotlib.pyplot as plt
 
-from core.tensor import Tensor
-from nn.activations import Tanh
-from nn.linear import Linear
-from nn.sequential import Sequential
-from train.optim import Adam
+from fit.core.tensor import Tensor
+from fit.nn.modules.activation import Tanh
+from fit.nn.modules.linear import Linear
+from fit.nn.modules.container import Sequential
+from fit.optim.adam import Adam
 
 
 def custom_mse_loss(predictions, targets):
@@ -46,153 +46,151 @@ def solve_xor():
     """
     Solve the XOR problem using a custom loss function that avoids the error.
     """
-    # Set random seed for reproducibility
-    np.random.seed(42)
+    print("Solving XOR problem with neural network...")
 
     # XOR dataset
-    X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
-    y = np.array([[0], [1], [1], [0]])
+    X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=np.float32)
+    y = np.array([[0], [1], [1], [0]], dtype=np.float32)
 
-    # Convert to tensors
-    X_tensor = Tensor(X, requires_grad=True)
-    y_tensor = Tensor(y, requires_grad=False)
+    print("Dataset:")
+    for i in range(len(X)):
+        print(f"  {X[i]} -> {y[i][0]}")
 
-    # Create model with a proper hidden layer size
-    hidden_size = 32
-    model = Sequential(Linear(2, hidden_size), Tanh(), Linear(hidden_size, 1))
+    # Create network: 2 -> 3 -> 1 with Tanh activations
+    model = Sequential(Linear(2, 3), Tanh(), Linear(3, 1), Tanh())
 
-    # Initialize first layer with specific pattern
-    init_scale = 1.0
-    first_weights = np.zeros((2, hidden_size))
-    for i in range(hidden_size):
-        if i % 2 == 0:
-            first_weights[0, i] = init_scale
-            first_weights[1, i] = -init_scale
-        else:
-            first_weights[0, i] = -init_scale
-            first_weights[1, i] = init_scale
-
-    # Alternating bias pattern
-    first_bias = np.zeros(hidden_size)
-    for i in range(hidden_size):
-        if i < hidden_size // 2:
-            first_bias[i] = 0.1
-        else:
-            first_bias[i] = -0.1
-
-    # Apply initialization
-    model.layers[0].weight.data = first_weights
-    model.layers[0].bias.data = first_bias
-
-    # Initialize output layer
-    model.layers[2].weight.data = np.random.uniform(-0.1, 0.1, (hidden_size, 1))
-    model.layers[2].bias.data = np.zeros(1)
-
-    # Create optimizer (no loss function, we'll use custom_mse_loss)
-    optimizer = Adam(model.parameters(), lr=0.01)  # Lower learning rate for stability
+    # Create optimizer
+    optimizer = Adam(model.parameters(), lr=0.1)
 
     # Training loop
+    epochs = 1000
     losses = []
-    accuracies = []
-    epochs = 2000
 
-    print("Training XOR model...")
-    for epoch in range(1, epochs + 1):
-        # Forward pass
-        outputs = model(X_tensor)
+    print(f"\nTraining for {epochs} epochs...")
 
-        # Use custom loss function to avoid the error
-        loss = custom_mse_loss(outputs, y_tensor)
-        losses.append(loss.data)
+    for epoch in range(epochs):
+        total_loss = 0
 
-        # Calculate accuracy
-        threshold = 0.5
-        predictions = (outputs.data >= threshold).astype(int)
-        true_values = y.astype(int)
-        accuracy = np.mean(predictions == true_values) * 100
-        accuracies.append(accuracy)
+        for i in range(len(X)):
+            # Convert to tensors
+            x_tensor = Tensor([X[i]], requires_grad=True)
+            y_tensor = Tensor([y[i]], requires_grad=False)
 
-        # Backward pass
-        loss.backward()
+            # Forward pass
+            output = model(x_tensor)
 
-        # Update parameters
-        optimizer.step()
-        optimizer.zero_grad()
+            # Calculate loss using custom MSE
+            loss = custom_mse_loss(output, y_tensor)
+
+            # Zero gradients
+            for param in model.parameters():
+                param.grad = None
+
+            # Backward pass
+            try:
+                if hasattr(loss, "backward_fn"):
+                    loss.backward_fn()
+                else:
+                    loss.backward()
+
+                # Update parameters
+                optimizer.step()
+
+                total_loss += loss.data
+            except Exception as e:
+                print(f"Error in training at epoch {epoch}: {e}")
+                return False
+
+        # Record average loss
+        avg_loss = total_loss / len(X)
+        losses.append(avg_loss)
 
         # Print progress
-        if epoch % 100 == 0 or epoch == 1:
-            print(
-                f"Epoch {epoch}/{epochs}, Loss: {loss.data:.4f}, Accuracy: {accuracy:.1f}%"
-            )
+        if epoch % 100 == 0:
+            print(f"Epoch {epoch}: Loss = {avg_loss:.6f}")
 
-        # Early stopping if we've solved the problem
-        if accuracy == 100.0 and loss.data < 0.01 and epoch > 100:
-            print(f"XOR problem solved at epoch {epoch}!")
-            break
-
-    # Plot loss curve
-    plt.figure(figsize=(10, 4))
-    plt.subplot(1, 2, 1)
-    plt.plot(losses)
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.title("Training Loss")
-
-    # Plot decision boundary
-    plt.subplot(1, 2, 2)
-
-    # Create a mesh grid for visualization
-    h = 0.01
-    x_min, x_max = -0.1, 1.1
-    y_min, y_max = -0.1, 1.1
-    xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
-    grid_points = np.c_[xx.ravel(), yy.ravel()]
-
-    # Make predictions on the grid
-    Z = []
-    for point in grid_points:
-        x_point = Tensor(point.reshape(1, -1))
-        pred = model(x_point).data[0][0]
-        Z.append(1 if pred >= 0.5 else 0)
-
-    Z = np.array(Z).reshape(xx.shape)
-
-    # Plot decision boundary
-    plt.contourf(xx, yy, Z, cmap=plt.cm.RdBu, alpha=0.5)
-    plt.scatter(X[:, 0], X[:, 1], c=y.flatten(), cmap=plt.cm.RdBu_r, edgecolors="k")
-    plt.xlabel("X1")
-    plt.ylabel("X2")
-    plt.title("Decision Boundary")
-
-    plt.tight_layout()
-    plt.savefig("xor_solved.png")
-
-    # Test the model
-    print("\nPredictions vs. Actual:")
+    # Test the trained model
+    print("\nTesting trained model:")
+    print("Input -> Output (Target)")
     for i in range(len(X)):
-        input_data = X[i]
+        x_tensor = Tensor([X[i]], requires_grad=False)
+        output = model(x_tensor)
+        predicted = output.data[0][0]
         actual = y[i][0]
+        print(f"{X[i]} -> {predicted:.4f} ({actual})")
 
-        # Make prediction
-        x_input = Tensor(input_data.reshape(1, -1))
-        prediction = model(x_input).data[0][0]
-        predicted_class = 1 if prediction >= 0.5 else 0
-
+    # Check if learning was successful
+    print("\nEvaluating results:")
+    correct = 0
+    for i in range(len(X)):
+        x_tensor = Tensor([X[i]], requires_grad=False)
+        output = model(x_tensor)
+        predicted = 1 if output.data[0][0] > 0.5 else 0
+        actual = int(y[i][0])
+        if predicted == actual:
+            correct += 1
         print(
-            f"Input: {input_data}, Predicted: {prediction:.4f} -> {predicted_class}, Actual: {actual}"
+            f"Input: {X[i]}, Predicted: {predicted}, Actual: {actual}, {'✓' if predicted == actual else '✗'}"
         )
 
-    # Calculate accuracy
-    outputs = model(X_tensor).data
-    threshold = 0.5
-    predicted_classes = (outputs >= threshold).astype(int)
-    actual_classes = y.astype(int)
-    accuracy = np.mean(predicted_classes == actual_classes) * 100
+    accuracy = correct / len(X)
+    print(f"\nAccuracy: {accuracy:.2%}")
 
-    print(f"\nAccuracy: {accuracy:.2f}%")
+    # Plot loss curve
+    try:
+        plt.figure(figsize=(10, 5))
 
-    return model, accuracy
+        plt.subplot(1, 2, 1)
+        plt.plot(losses)
+        plt.title("Training Loss")
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.grid(True)
+
+        plt.subplot(1, 2, 2)
+        # Create a grid to visualize the decision boundary
+        xx, yy = np.meshgrid(np.linspace(-0.5, 1.5, 50), np.linspace(-0.5, 1.5, 50))
+        grid_points = np.c_[xx.ravel(), yy.ravel()]
+
+        # Get model predictions for the grid
+        Z = []
+        for point in grid_points:
+            x_tensor = Tensor([point], requires_grad=False)
+            output = model(x_tensor)
+            Z.append(output.data[0][0])
+
+        Z = np.array(Z).reshape(xx.shape)
+
+        # Plot decision boundary
+        plt.contourf(xx, yy, Z, levels=50, alpha=0.8, cmap="RdYlBu")
+        plt.colorbar(label="Output")
+
+        # Plot data points
+        colors = ["red", "blue"]
+        for i in range(len(X)):
+            plt.scatter(
+                X[i][0], X[i][1], c=colors[int(y[i][0])], s=100, edgecolors="black"
+            )
+
+        plt.title("XOR Decision Boundary")
+        plt.xlabel("Input 1")
+        plt.ylabel("Input 2")
+        plt.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig("xor_results.png", dpi=150, bbox_inches="tight")
+        plt.show()
+
+        print("Plot saved as 'xor_results.png'")
+    except Exception as e:
+        print(f"Could not generate plot: {e}")
+
+    return accuracy > 0.75  # Return True if we got at least 75% accuracy
 
 
 if __name__ == "__main__":
-    solve_xor()
+    success = solve_xor()
+    if success:
+        print("\n🎉 XOR problem solved successfully!")
+    else:
+        print("\n❌ Failed to solve XOR problem")

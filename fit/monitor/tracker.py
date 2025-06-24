@@ -1,496 +1,321 @@
+"""
+Training tracker for monitoring and logging training progress.
+"""
+
 import json
 import os
 import time
-from collections import defaultdict
 from datetime import datetime
-
+from typing import Dict, List, Optional, Any, Union
 import numpy as np
+
+from fit.core.tensor import Tensor
 
 
 class TrainingTracker:
+    """
+    Comprehensive training tracker for monitoring metrics, early stopping, and logging.
+    """
+
     def __init__(
         self,
-        experiment_name=None,
-        log_dir="./logs",
-        save_best=True,
-        best_metric="loss",
-        track_gradients=False,
-        early_stopping=None,
+        experiment_name: Optional[str] = None,
+        log_dir: str = "./logs",
+        early_stopping: Optional[Dict] = None,
+        save_best: bool = True,
+        verbose: int = 1,
     ):
         """
-        Enhanced training tracker with better visualization and logging.
+        Initialize training tracker.
 
         Args:
-            experiment_name: Name for this training run (auto-generated if None)
+            experiment_name: Name of the experiment
             log_dir: Directory to save logs
-            save_best: Whether to track and report best metric values
-            best_metric: Metric to track for "best" model ('loss' or 'accuracy')
-            track_gradients: Whether to track gradient norms (requires passing gradient info)
-            early_stopping: Dict with early stopping settings, e.g., {'patience': 10, 'min_delta': 0.001}
+            early_stopping: Early stopping configuration
+            save_best: Whether to save best model state
+            verbose: Verbosity level (0=silent, 1=normal, 2=verbose)
         """
-        self.experiment_name = experiment_name
-        if self.experiment_name is None:
-            self.experiment_name = "exp_" + datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.log_dir = os.path.join(log_dir, self.experiment_name)
-        os.makedirs(self.log_dir, exist_ok=True)
-
-        # Core tracking attributes
-        self.logs = defaultdict(list)
-        self.epoch_start_time = None
-        self.training_start_time = time.time()
-        self.current_epoch = 0
-
-        # Enhanced features
+        self.experiment_name = experiment_name or f"experiment_{int(time.time())}"
+        self.log_dir = log_dir
+        self.verbose = verbose
         self.save_best = save_best
-        self.best_metric = best_metric
-        self.best_values = {"loss": float("inf"), "accuracy": 0.0}
-        self.best_epochs = {"loss": 0, "accuracy": 0}
 
-        self.track_gradients = track_gradients
-        self.gradient_norms = []
+        # Create log directory
+        os.makedirs(log_dir, exist_ok=True)
+
+        # Initialize tracking data
+        self.logs = {}
+        self.current_epoch = 0
+        self.start_time = None
+        self.best_values = {}
+        self.best_epochs = {}
 
         # Early stopping
-        self.early_stopping = early_stopping or {}
-        self.patience_counter = 0
-        self.should_stop = False
+        self.early_stopping = early_stopping
+        if early_stopping:
+            self.patience = early_stopping.get("patience", 10)
+            self.min_delta = early_stopping.get("min_delta", 1e-4)
+            self.monitor_metric = early_stopping.get("metric", "val_loss")
+            self.mode = early_stopping.get("mode", "min")  # 'min' or 'max'
+            self.wait = 0
+            self.stopped_epoch = 0
+            self.best_value = float("inf") if self.mode == "min" else float("-inf")
 
-    def start_epoch(self):
-        """Start timing a new training epoch."""
-        self.current_epoch += 1
-        self.epoch_start_time = time.time()
-        return self  # For method chaining
+        # Metrics history
+        self.epoch_times = []
+        self.learning_rates = []
 
-    def log(self, loss, acc=None, lr=None, grad_norm=None, custom_metrics=None):
+    def start_training(self):
+        """Mark the start of training."""
+        self.start_time = time.time()
+        if self.verbose >= 1:
+            print(f"Starting training experiment: {self.experiment_name}")
+            print(f"Logs will be saved to: {self.log_dir}")
+
+    def update(self, epoch: int, metrics: Dict[str, float]) -> bool:
         """
-        Log metrics for the current epoch.
+        Update tracker with metrics for current epoch.
 
         Args:
-            loss: Loss value (required)
-            acc: Accuracy value (optional)
-            lr: Learning rate (optional)
-            grad_norm: Gradient norm (optional, only if track_gradients=True)
-            custom_metrics: Dict of any additional metrics to track
+            epoch: Current epoch number
+            metrics: Dictionary of metric names and values
+
+        Returns:
+            True if training should stop (early stopping), False otherwise
         """
-        # Calculate epoch duration
-        duration = (
-            time.time() - self.epoch_start_time if self.epoch_start_time else None
-        )
+        self.current_epoch = epoch
 
-        # Log standard metrics
-        self.logs["loss"].append(float(loss))
+        # Record metrics
+        for metric_name, value in metrics.items():
+            if metric_name not in self.logs:
+                self.logs[metric_name] = []
 
-        if acc is not None:
-            self.logs["accuracy"].append(float(acc))
+            # Convert tensor to float if needed
+            if isinstance(value, Tensor):
+                value = float(value.data)
+            elif isinstance(value, np.ndarray):
+                value = float(value)
 
-        if lr is not None:
-            self.logs["lr"].append(float(lr))
+            self.logs[metric_name].append(value)
 
-        if duration is not None:
-            self.logs["time"].append(duration)
-
-        # Track gradient norms if enabled
-        if self.track_gradients and grad_norm is not None:
-            self.logs["grad_norm"].append(float(grad_norm))
-
-        # Log any custom metrics
-        if custom_metrics:
-            for name, value in custom_metrics.items():
-                self.logs[name].append(float(value))
-
-        # Update best values
-        self._update_best_values()
-
-        # Check early stopping criteria
-        if self.early_stopping:
-            self._check_early_stopping()
-
-        return self  # For method chaining
-
-    def _update_best_values(self):
-        """Update tracking of best metric values."""
-        # Update best loss (lower is better)
-        current_loss = self.logs["loss"][-1]
-        if current_loss < self.best_values["loss"]:
-            self.best_values["loss"] = current_loss
-            self.best_epochs["loss"] = self.current_epoch
-
-        # Update best accuracy (higher is better)
-        if "accuracy" in self.logs:
-            current_acc = self.logs["accuracy"][-1]
-            if current_acc > self.best_values["accuracy"]:
-                self.best_values["accuracy"] = current_acc
-                self.best_epochs["accuracy"] = self.current_epoch
-
-    def _check_early_stopping(self):
-        """Check if early stopping criteria are met."""
-        if not self.early_stopping:
-            return
-
-        patience = self.early_stopping.get("patience", 10)
-        min_delta = self.early_stopping.get("min_delta", 0.001)
-        metric = self.early_stopping.get("metric", "loss")
-
-        if metric not in self.logs:
-            return
-
-        # Get current and best values
-        current_value = self.logs[metric][-1]
-        best_value = self.best_values.get(metric)
-
-        if best_value is None:
-            return
-
-        # Check if improvement (depending on metric)
-        is_improvement = False
-
-        if metric == "loss" or metric.endswith("_loss"):
-            # For loss metrics, lower is better
-            is_improvement = current_value < (best_value - min_delta)
-        else:
-            # For other metrics like accuracy, higher is better
-            is_improvement = current_value > (best_value + min_delta)
-
-        # Reset or increment patience counter
-        if is_improvement:
-            self.patience_counter = 0
-        else:
-            self.patience_counter += 1
-
-        # Check if we should stop
-        if self.patience_counter >= patience:
-            self.should_stop = True
-
-    def should_early_stop(self):
-        """Return True if early stopping criteria have been met."""
-        return self.should_stop
-
-    def summary(self, last_n=5, style="box", show_best=True):
-        """
-        Display a summary of training progress.
-
-        Args:
-            last_n: Number of most recent epochs to display
-            style: Output style ("box", "table", "minimal")
-            show_best: Whether to show best metric values
-        """
-        # Determine length of training period
-        total_duration = time.time() - self.training_start_time
-        hours, remainder = divmod(total_duration, 3600)
-        minutes, seconds = divmod(remainder, 60)
-        time_str = f"{int(hours)}h {int(minutes)}m {seconds:.2f}s"
-
-        if style == "box":
-            self._box_summary(last_n, show_best, time_str)
-        elif style == "table":
-            self._table_summary(last_n, show_best, time_str)
-        else:
-            self._minimal_summary(last_n, show_best, time_str)
-
-    def _box_summary(self, last_n, show_best, time_str):
-        """Display summary in a nice box format."""
-        print("\n" + "═" * 70)
-        print(f"Training Summary: {self.experiment_name}")
-        print("═" * 70)
-
-        # Determine metrics to show
-        metrics = [k for k in self.logs.keys() if k != "time"]
-
-        # Show last N epochs
-        print(f"\nLast {min(last_n, len(self.logs['loss']))} Epochs:")
-        print("╭" + "─" * 68 + "╮")
-
-        # Header
-        header = "│ Epoch"
-        for metric in metrics:
-            header += f" | {metric.capitalize()}"
-        if "time" in self.logs:
-            header += " | Time"
-        header = header.ljust(69) + "│"
-        print(header)
-        print("├" + "─" * 68 + "┤")
-
-        # Data rows
-        for i in range(1, min(last_n + 1, len(self.logs["loss"]) + 1)):
-            idx = -i
-            try:
-                row = f"│ {self.current_epoch + idx + 1:4d}"
-
-                for metric in metrics:
-                    if (
-                        metric == "accuracy"
-                        and metric in self.logs
-                        and idx < len(self.logs[metric])
-                    ):
-                        row += f" | {self.logs[metric][idx] * 100:6.2f}%"
-                    elif (
-                        metric == "lr"
-                        and metric in self.logs
-                        and idx < len(self.logs[metric])
-                    ):
-                        row += f" | {self.logs[metric][idx]:.6f}"
-                    elif idx < len(self.logs[metric]):
-                        row += f" | {self.logs[metric][idx]:.6f}"
-                    else:
-                        row += " | -"
-
-                if "time" in self.logs and idx < len(self.logs["time"]):
-                    row += f" | {self.logs['time'][idx]:.2f}s"
-
-                print(row.ljust(69) + "│")
-            except IndexError:
-                continue
-
-        print("╰" + "─" * 68 + "╯")
-
-        # Show best values if requested
-        if show_best:
-            print("\nBest Values:")
-            for metric in ["loss", "accuracy"]:
-                if metric in self.logs and len(self.logs[metric]) > 0:
-                    if metric == "accuracy":
-                        best_value = self.best_values[metric] * 100
-                        best_epoch = self.best_epochs[metric]
-                        print(
-                            f"* Best {metric}: {best_value:.2f}% (epoch {best_epoch})"
-                        )
-                    else:
-                        best_value = self.best_values[metric]
-                        best_epoch = self.best_epochs[metric]
-                        print(f"* Best {metric}: {best_value:.6f} (epoch {best_epoch})")
-
-        # Show early stopping status if enabled
-        if self.early_stopping:
-            metric_name = self.early_stopping.get("metric", "loss")
-            print(f"\nEarly Stopping ({metric_name}):")
-            print(
-                f"• Patience: {self.patience_counter}/{self.early_stopping.get('patience', 10)}"
-            )
-            if self.should_stop:
-                print("• Status: STOP TRAINING (criteria met)")
+            # Track best values
+            if metric_name not in self.best_values:
+                self.best_values[metric_name] = value
+                self.best_epochs[metric_name] = epoch
             else:
-                print("• Status: Continue training")
+                # Update best value (assuming lower is better for loss, higher for accuracy)
+                is_better = False
+                if "loss" in metric_name.lower() or "error" in metric_name.lower():
+                    is_better = value < self.best_values[metric_name]
+                else:
+                    is_better = value > self.best_values[metric_name]
 
-        # Show total training time
-        print(f"\nTotal Training Time: {time_str}")
+                if is_better:
+                    self.best_values[metric_name] = value
+                    self.best_epochs[metric_name] = epoch
 
-    def _table_summary(self, last_n, show_best, time_str):
-        """Display summary in a simple table format."""
-        print(f"\nTraining Summary: {self.experiment_name}")
-        print("-" * 70)
+        # Check early stopping
+        should_stop = False
+        if self.early_stopping and self.monitor_metric in metrics:
+            should_stop = self._check_early_stopping(metrics[self.monitor_metric])
 
-        # Determine metrics to show
-        metrics = [k for k in self.logs.keys() if k != "time"]
+        # Log progress
+        if self.verbose >= 1:
+            self._log_epoch(epoch, metrics)
 
-        # Header
-        header = f"{'Epoch':6s}"
-        for metric in metrics:
-            header += f" | {metric:10s}"
-        if "time" in self.logs:
-            header += f" | {'Time':8s}"
-        print(header)
-        print("-" * 70)
+        return should_stop
 
-        # Data rows
-        for i in range(1, min(last_n + 1, len(self.logs["loss"]) + 1)):
-            idx = -i
-            try:
-                row = f"{self.current_epoch + idx + 1:6d}"
+    def _check_early_stopping(self, current_value: float) -> bool:
+        """
+        Check if early stopping criteria are met.
 
-                for metric in metrics:
-                    if (
-                        metric == "accuracy"
-                        and metric in self.logs
-                        and idx < len(self.logs[metric])
-                    ):
-                        row += f" | {self.logs[metric][idx] * 100:8.2f}%"
-                    elif idx < len(self.logs[metric]):
-                        row += f" | {self.logs[metric][idx]:10.6f}"
-                    else:
-                        row += f" | {'-':10s}"
+        Args:
+            current_value: Current value of monitored metric
 
-                if "time" in self.logs and idx < len(self.logs["time"]):
-                    row += f" | {self.logs['time'][idx]:6.2f}s"
+        Returns:
+            True if training should stop
+        """
+        if self.mode == "min":
+            improved = current_value < (self.best_value - self.min_delta)
+        else:
+            improved = current_value > (self.best_value + self.min_delta)
 
-                print(row)
-            except IndexError:
-                continue
+        if improved:
+            self.best_value = current_value
+            self.wait = 0
+        else:
+            self.wait += 1
 
-        print("-" * 70)
+        if self.wait >= self.patience:
+            self.stopped_epoch = self.current_epoch
+            if self.verbose >= 1:
+                print(f"\nEarly stopping at epoch {self.current_epoch}")
+                print(
+                    f"Best {self.monitor_metric}: {self.best_value} at epoch {self.current_epoch - self.wait}"
+                )
+            return True
 
-        # Show best values if requested
-        if show_best:
-            print("\nBest Values:")
-            for metric in ["loss", "accuracy"]:
-                if metric in self.logs and len(self.logs[metric]) > 0:
-                    best_value = self.best_values[metric]
-                    best_epoch = self.best_epochs[metric]
+        return False
 
-                    if metric == "accuracy":
-                        # Format accuracy as percentage
-                        formatted_value = f"{best_value * 100:.2f}%"
-                    else:
-                        # Format other metrics with 6 decimal places
-                        formatted_value = f"{best_value:.6f}"
+    def _log_epoch(self, epoch: int, metrics: Dict[str, float]):
+        """Log metrics for current epoch."""
+        if epoch == 0:
+            # Print header
+            header = f"{'Epoch':<6}"
+            for metric in metrics.keys():
+                header += f"{metric:<12}"
+            header += f"{'Time':<8}"
+            print(header)
+            print("-" * len(header))
 
-                    print(f"- Best {metric}: {formatted_value} (epoch {best_epoch})")
+        # Print metrics
+        log_line = f"{epoch + 1:<6}"
+        for metric, value in metrics.items():
+            if isinstance(value, float):
+                log_line += f"{value:<12.4f}"
+            else:
+                log_line += f"{value:<12}"
 
-        # Show total training time
-        print(f"\nTotal Training Time: {time_str}")
+        # Add time if available
+        if len(self.epoch_times) > epoch:
+            log_line += f"{self.epoch_times[epoch]:<8.2f}s"
 
-    def _minimal_summary(self, last_n, show_best, time_str):
-        """Display summary in a minimal format."""
-        print(f"\nTraining Summary ({self.experiment_name}):")
+        print(log_line)
 
-        # Show latest epoch
-        if self.logs["loss"]:
-            print(f"Latest (Epoch {self.current_epoch}):")
-            print(f"- Loss: {self.logs['loss'][-1]:.6f}")
+    def log_epoch_time(self, epoch_time: float):
+        """Log time taken for current epoch."""
+        self.epoch_times.append(epoch_time)
 
-            if "accuracy" in self.logs and self.logs["accuracy"]:
-                print(f"- Accuracy: {self.logs['accuracy'][-1] * 100:.2f}%")
+    def log_learning_rate(self, lr: float):
+        """Log current learning rate."""
+        self.learning_rates.append(lr)
 
-        # Show best values if requested
-        if show_best:
-            print("\nBest Values:")
-            for metric in ["loss", "accuracy"]:
-                if metric in self.logs and len(self.logs[metric]) > 0:
-                    best_value = self.best_values[metric]
-                    best_epoch = self.best_epochs[metric]
-
-                    if metric == "accuracy":
-                        # Format accuracy as percentage
-                        best_value_formatted = f"{best_value * 100:.2f}%"
-                    else:
-                        # Format other metrics with 6 decimal places
-                        best_value_formatted = f"{best_value:.6f}"
-
-                    print(
-                        f"- Best {metric}: {best_value_formatted} (epoch {best_epoch})"
-                    )
-
-        # Show total training time
-        print(f"\nTotal Training Time: {time_str}")
-
-    def plot(self, metrics=None, figsize=(10, 6), save_path=None):
+    def plot_metrics(
+        self, metrics: Optional[List[str]] = None, save_path: Optional[str] = None
+    ):
         """
         Plot training metrics.
 
         Args:
-            metrics: List of metrics to plot (None = all available)
-            figsize: Figure size as (width, height)
-            save_path: Where to save the plot (displayed if None)
-
-        Returns:
-            True if successful, False otherwise
+            metrics: List of metrics to plot (default: all)
+            save_path: Path to save plot (optional)
         """
         try:
             import matplotlib.pyplot as plt
-
-            if metrics is None:
-                # Plot all metrics except time
-                metrics = [
-                    k for k in self.logs.keys() if k != "time" and len(self.logs[k]) > 0
-                ]
-
-            # Create figure
-            fig, axes = plt.subplots(len(metrics), 1, figsize=figsize, sharex=True)
-            if len(metrics) == 1:
-                axes = [axes]
-
-            # Plot each metric
-            for i, metric in enumerate(metrics):
-                if metric not in self.logs or not self.logs[metric]:
-                    continue
-
-                epochs = list(range(1, len(self.logs[metric]) + 1))
-                axes[i].plot(epochs, self.logs[metric], "b-", linewidth=2)
-
-                # Add best value marking
-                if metric == "loss" or metric == "accuracy":
-                    best_epoch = self.best_epochs[metric]
-                    best_value = self.best_values[metric]
-                    if 0 < best_epoch <= len(epochs):
-                        axes[i].plot(best_epoch, best_value, "ro", markersize=5)
-                        axes[i].text(
-                            best_epoch,
-                            best_value,
-                            f" Best: {best_value:.6f}",
-                            verticalalignment="bottom",
-                        )
-
-                # Customize plot
-                axes[i].set_title(metric.capitalize())
-                axes[i].grid(True)
-
-                # Set y-axis label and limits
-                axes[i].set_ylabel(metric)
-                if metric == "accuracy":
-                    axes[i].set_ylim([0, 1])
-
-            # Set x-axis label
-            axes[-1].set_xlabel("Epoch")
-
-            plt.tight_layout()
-
-            # Save or display
-            if save_path:
-                plt.savefig(save_path)
-                print(f"Plot saved to {save_path}")
-            else:
-                plt.show()
-
-            return True
-
         except ImportError:
-            print("Plotting requires matplotlib. Install with: pip install matplotlib")
+            print("Matplotlib not available. Install with: pip install matplotlib")
             return False
 
-    def export(self, filepath=None, format="csv"):
+        if not self.logs:
+            print("No metrics to plot")
+            return False
+
+        metrics_to_plot = metrics or list(self.logs.keys())
+        metrics_to_plot = [
+            m for m in metrics_to_plot if m in self.logs and self.logs[m]
+        ]
+
+        if not metrics_to_plot:
+            print("No valid metrics found to plot")
+            return False
+
+        # Create subplots
+        n_metrics = len(metrics_to_plot)
+        n_cols = min(2, n_metrics)
+        n_rows = (n_metrics + n_cols - 1) // n_cols
+
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(12, 4 * n_rows))
+        if n_metrics == 1:
+            axes = [axes]
+        elif n_rows == 1:
+            axes = axes if n_cols > 1 else [axes]
+        else:
+            axes = axes.flatten()
+
+        for i, metric in enumerate(metrics_to_plot):
+            ax = axes[i]
+            epochs = range(1, len(self.logs[metric]) + 1)
+            ax.plot(epochs, self.logs[metric], "b-", linewidth=2, label=metric)
+
+            # Mark best value
+            if metric in self.best_values:
+                best_epoch = self.best_epochs[metric]
+                best_value = self.best_values[metric]
+                ax.plot(
+                    best_epoch + 1,
+                    best_value,
+                    "ro",
+                    markersize=8,
+                    label=f"Best: {best_value:.4f}",
+                )
+
+            ax.set_title(f'{metric.replace("_", " ").title()}')
+            ax.set_xlabel("Epoch")
+            ax.set_ylabel(metric)
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+
+        # Remove empty subplots
+        for i in range(n_metrics, len(axes)):
+            axes[i].remove()
+
+        plt.tight_layout()
+
+        if save_path:
+            plt.savefig(save_path, dpi=150, bbox_inches="tight")
+            print(f"Plot saved to {save_path}")
+        else:
+            # Save to log directory
+            plot_path = os.path.join(
+                self.log_dir, f"{self.experiment_name}_metrics.png"
+            )
+            plt.savefig(plot_path, dpi=150, bbox_inches="tight")
+            print(f"Plot saved to {plot_path}")
+
+        plt.show()
+        return True
+
+    def export(self, filepath: Optional[str] = None, format: str = "json") -> str:
         """
-        Export training logs to a file.
+        Export training logs to file.
 
         Args:
-            filepath: Path to save the file (auto-generated if None)
-            format: Export format ("csv" or "json")
+            filepath: Path to save file (auto-generated if None)
+            format: Export format ("json" or "csv")
 
         Returns:
-            Path to the exported file
+            Path to exported file
         """
         if filepath is None:
-            ext = ".csv" if format.lower() == "csv" else ".json"
-            filepath = os.path.join(self.log_dir, f"training_log{ext}")
+            ext = ".json" if format.lower() == "json" else ".csv"
+            filepath = os.path.join(self.log_dir, f"{self.experiment_name}_logs{ext}")
 
-        if format.lower() == "csv":
-            return self._export_csv(filepath)
-        else:
+        if format.lower() == "json":
             return self._export_json(filepath)
+        else:
+            return self._export_csv(filepath)
 
-    def _export_csv(self, filepath):
-        """Export logs to CSV format."""
-        import csv
-
-        keys = self.logs.keys()
-        with open(filepath, "w", newline="") as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=keys)
-            writer.writeheader()
-
-            for i in range(len(self.logs["loss"])):
-                row = {
-                    k: self.logs[k][i] if i < len(self.logs[k]) else "" for k in keys
-                }
-                writer.writerow(row)
-
-        print(f"Logs exported to {filepath}")
-        return filepath
-
-    def _export_json(self, filepath):
+    def _export_json(self, filepath: str) -> str:
         """Export logs to JSON format."""
         export_data = {
             "experiment_name": self.experiment_name,
-            "epochs": self.current_epoch,
+            "total_epochs": self.current_epoch + 1,
+            "training_time": time.time() - self.start_time if self.start_time else None,
             "best_values": self.best_values,
             "best_epochs": self.best_epochs,
-            "logs": {k: [float(v) for v in vals] for k, vals in self.logs.items()},
+            "logs": self.logs,
+            "early_stopping": (
+                {
+                    "stopped": self.stopped_epoch > 0,
+                    "stopped_epoch": self.stopped_epoch,
+                    "patience": getattr(self, "patience", None),
+                    "monitor_metric": getattr(self, "monitor_metric", None),
+                }
+                if self.early_stopping
+                else None
+            ),
+            "epoch_times": self.epoch_times,
+            "learning_rates": self.learning_rates,
             "timestamp": datetime.now().isoformat(),
         }
 
@@ -500,156 +325,130 @@ class TrainingTracker:
         print(f"Logs exported to {filepath}")
         return filepath
 
-    def load(self, filepath):
+    def _export_csv(self, filepath: str) -> str:
+        """Export logs to CSV format."""
+        import csv
+
+        if not self.logs:
+            print("No logs to export")
+            return filepath
+
+        # Get all metric names
+        metrics = list(self.logs.keys())
+        max_epochs = max(len(values) for values in self.logs.values())
+
+        with open(filepath, "w", newline="") as csvfile:
+            writer = csv.writer(csvfile)
+
+            # Write header
+            header = ["epoch"] + metrics
+            if self.epoch_times:
+                header.append("epoch_time")
+            if self.learning_rates:
+                header.append("learning_rate")
+            writer.writerow(header)
+
+            # Write data
+            for epoch in range(max_epochs):
+                row = [epoch + 1]
+
+                # Add metric values
+                for metric in metrics:
+                    if epoch < len(self.logs[metric]):
+                        row.append(self.logs[metric][epoch])
+                    else:
+                        row.append("")
+
+                # Add epoch time if available
+                if self.epoch_times and epoch < len(self.epoch_times):
+                    row.append(self.epoch_times[epoch])
+                elif self.epoch_times:
+                    row.append("")
+
+                # Add learning rate if available
+                if self.learning_rates and epoch < len(self.learning_rates):
+                    row.append(self.learning_rates[epoch])
+                elif self.learning_rates:
+                    row.append("")
+
+                writer.writerow(row)
+
+        print(f"Logs exported to {filepath}")
+        return filepath
+
+    def load(self, filepath: str) -> bool:
         """
         Load training logs from file.
 
         Args:
-            filepath: Path to the log file (.json or .csv)
+            filepath: Path to log file (.json)
 
         Returns:
             True if successful, False otherwise
         """
-        if filepath.endswith(".json"):
-            return self._load_json(filepath)
-        elif filepath.endswith(".csv"):
-            return self._load_csv(filepath)
-        else:
-            print(f"Unsupported file format: {filepath}")
-            return False
-
-    def _load_json(self, filepath):
-        """Load logs from JSON file."""
         try:
             with open(filepath, "r") as f:
                 data = json.load(f)
 
-            # Restore logs
-            self.logs = defaultdict(list)
-            for k, vals in data.get("logs", {}).items():
-                self.logs[k] = vals
-
-            # Restore other attributes
             self.experiment_name = data.get("experiment_name", self.experiment_name)
-            self.current_epoch = data.get("epochs", len(self.logs.get("loss", [])))
-            self.best_values = data.get("best_values", self.best_values)
-            self.best_epochs = data.get("best_epochs", self.best_epochs)
+            self.logs = data.get("logs", {})
+            self.best_values = data.get("best_values", {})
+            self.best_epochs = data.get("best_epochs", {})
+            self.epoch_times = data.get("epoch_times", [])
+            self.learning_rates = data.get("learning_rates", [])
 
-            print(f"Loaded training logs from {filepath}")
+            # Update current epoch
+            if self.logs:
+                self.current_epoch = (
+                    max(len(values) for values in self.logs.values()) - 1
+                )
+
+            print(f"Logs loaded from {filepath}")
             return True
 
         except Exception as e:
-            print(f"Error loading logs from {filepath}: {e}")
+            print(f"Error loading logs: {e}")
             return False
 
-    def _load_csv(self, filepath):
-        """Load logs from CSV file."""
-        try:
-            import csv
-
-            self.logs = defaultdict(list)
-
-            with open(filepath, "r", newline="") as csvfile:
-                reader = csv.DictReader(csvfile)
-                for row in reader:
-                    for k, v in row.items():
-                        if v != "":
-                            self.logs[k].append(float(v))
-
-            # Recalculate current epoch and best values
-            self.current_epoch = len(self.logs.get("loss", []))
-            self._update_best_values_all()
-
-            print(f"Loaded training logs from {filepath}")
-            return True
-
-        except Exception as e:
-            print(f"Error loading logs from {filepath}: {e}")
-            return False
-
-    def _update_best_values_all(self):
-        """Update best values based on all logged data."""
-        # Reset best values
-        self.best_values = {"loss": float("inf"), "accuracy": 0.0}
-        self.best_epochs = {"loss": 0, "accuracy": 0}
-
-        # Update loss
-        if "loss" in self.logs and self.logs["loss"]:
-            best_loss = min(self.logs["loss"])
-            best_loss_epoch = self.logs["loss"].index(best_loss) + 1
-
-            self.best_values["loss"] = best_loss
-            self.best_epochs["loss"] = best_loss_epoch
-
-        # Update accuracy
-        if "accuracy" in self.logs and self.logs["accuracy"]:
-            best_acc = max(self.logs["accuracy"])
-            best_acc_epoch = self.logs["accuracy"].index(best_acc) + 1
-
-            self.best_values["accuracy"] = best_acc
-            self.best_epochs["accuracy"] = best_acc_epoch
-
-    def get_progress_stats(self):
+    def summary(self) -> Dict[str, Any]:
         """
-        Get statistics about training progress.
+        Get training summary.
 
         Returns:
-            Dictionary with progress statistics
+            Dictionary with training summary
         """
-        stats = {
-            "epochs": self.current_epoch,
-            "best_values": self.best_values.copy(),
-            "best_epochs": self.best_epochs.copy(),
-            "early_stopping": {
-                "enabled": bool(self.early_stopping),
-                "patience_counter": self.patience_counter,
-                "should_stop": self.should_stop,
-            },
+        total_time = time.time() - self.start_time if self.start_time else None
+
+        summary = {
+            "experiment_name": self.experiment_name,
+            "total_epochs": self.current_epoch + 1,
+            "training_time": total_time,
+            "best_metrics": self.best_values,
+            "early_stopped": self.stopped_epoch > 0,
+            "stopped_epoch": self.stopped_epoch if self.stopped_epoch > 0 else None,
         }
 
-        # Calculate improvement rates (from last 5 epochs)
-        for metric in ["loss", "accuracy"]:
-            if metric in self.logs and len(self.logs[metric]) >= 5:
-                # Calculate absolute improvement rate
-                values = self.logs[metric][-5:]
-                first, last = values[0], values[-1]
-                abs_change = last - first
+        if total_time:
+            summary["avg_epoch_time"] = total_time / (self.current_epoch + 1)
 
-                # Calculate relative improvement rate (% change per epoch)
-                relative_change = abs_change / abs(first) * 100 / 4  # per epoch
+        return summary
 
-                # Add to stats
-                if "improvement_rates" not in stats:
-                    stats["improvement_rates"] = {}
+    def __str__(self) -> str:
+        """String representation of tracker."""
+        summary = self.summary()
+        lines = [f"TrainingTracker: {summary['experiment_name']}"]
+        lines.append(f"  Epochs: {summary['total_epochs']}")
 
-                stats["improvement_rates"][metric] = {
-                    "absolute": abs_change,
-                    "relative_percent": relative_change,
-                }
+        if summary.get("training_time"):
+            lines.append(f"  Training time: {summary['training_time']:.2f}s")
 
-        # Calculate metric trends
-        if len(self.logs.get("loss", [])) >= 3:
-            trends = {}
+        if summary["best_metrics"]:
+            lines.append("  Best metrics:")
+            for metric, value in summary["best_metrics"].items():
+                epoch = self.best_epochs.get(metric, 0)
+                lines.append(f"    {metric}: {value:.4f} (epoch {epoch + 1})")
 
-            for metric in ["loss", "accuracy"]:
-                if metric in self.logs and len(self.logs[metric]) >= 3:
-                    values = self.logs[metric][-3:]
+        if summary["early_stopped"]:
+            lines.append(f"  Early stopped at epoch {summary['stopped_epoch']}")
 
-                    # Determine trend (increasing, decreasing, stable)
-                    if all(values[i] < values[i - 1] for i in range(1, len(values))):
-                        trend = "decreasing"
-                    elif all(values[i] > values[i - 1] for i in range(1, len(values))):
-                        trend = "increasing"
-                    else:
-                        trend = "fluctuating"
-
-                    # Determine if trend is good
-                    is_good = (metric == "loss" and trend == "decreasing") or (
-                        metric != "loss" and trend == "increasing"
-                    )
-
-                    trends[metric] = {"trend": trend, "is_good": is_good}
-
-            stats["trends"] = trends
-
-        return stats
+        return "\n".join(lines)

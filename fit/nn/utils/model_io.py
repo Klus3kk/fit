@@ -4,7 +4,7 @@ import pickle
 
 import numpy as np
 
-from core.tensor import Tensor
+from fit.core.tensor import Tensor
 
 
 def save_model(model, path):
@@ -83,7 +83,7 @@ def load_model(path, model_class=None):
         model_type = model_data.get("model_type", "")
 
         if "Sequential" in model_type:
-            from nn.sequential import Sequential
+            from fit.nn.modules.container import Sequential
 
             # Create empty Sequential model
             model = Sequential()
@@ -97,26 +97,26 @@ def load_model(path, model_class=None):
 
                     # Import and instantiate each layer
                     if layer_type == "Linear":
-                        from nn.linear import Linear
+                        from fit.nn.modules.linear import Linear
 
                         in_features = layer_config.get("in_features")
                         out_features = layer_config.get("out_features")
                         layer = Linear(in_features, out_features)
                     elif layer_type == "ReLU":
-                        from nn.activations import ReLU
+                        from fit.nn.modules.activation import ReLU
 
                         layer = ReLU()
                     elif layer_type == "Softmax":
-                        from nn.activations import Softmax
+                        from fit.nn.modules.activation import Softmax
 
                         layer = Softmax()
                     elif layer_type == "Dropout":
-                        from nn.activations import Dropout
+                        from fit.nn.modules.activation import Dropout
 
                         p = layer_config.get("p", 0.5)
                         layer = Dropout(p)
                     elif layer_type == "BatchNorm":
-                        from nn.normalization import BatchNorm
+                        from fit.nn.modules.normalization import BatchNorm
 
                         num_features = layer_config.get("num_features")
                         eps = layer_config.get("eps", 1e-5)

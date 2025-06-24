@@ -5,7 +5,7 @@ This module implements the Tensor class for automatic differentiation in the ML 
 import numpy as np
 from typing import Any, Callable, List, Optional, Set, Tuple, Union
 
-from core.autograd import Node, get_function
+from fit.core.autograd import Node, get_function
 
 
 class Tensor(Node):
@@ -81,7 +81,7 @@ class Tensor(Node):
             other = Tensor(other)
 
         # Use the Multiply function from autograd
-        from core.autograd import Multiply
+        from fit.core.autograd import Multiply
 
         return Multiply.forward(self, other)
 
@@ -99,26 +99,22 @@ class Tensor(Node):
         Returns:
             A new tensor containing the result
         """
-        other = other if isinstance(other, Tensor) else Tensor(other)
-        return self + (-other)
+        # Convert scalar to tensor if needed
+        if not isinstance(other, Tensor):
+            other = Tensor(other)
+
+        # Use subtraction via addition of negative
+        return self + (-1 * other)
 
     def __rsub__(self, other):
         """Handle right subtraction (scalar - tensor)."""
-        other = other if isinstance(other, Tensor) else Tensor(other)
-        return other + (-self)
-
-    def __neg__(self):
-        """
-        Negate this tensor.
-
-        Returns:
-            A new tensor with negated values
-        """
-        return self * Tensor(-1)
+        if not isinstance(other, Tensor):
+            other = Tensor(other)
+        return other - self
 
     def __truediv__(self, other):
         """
-        Divide this tensor by another tensor or scalar.
+        Divide tensor by another tensor or scalar.
 
         Args:
             other: Another tensor or scalar value
@@ -126,41 +122,33 @@ class Tensor(Node):
         Returns:
             A new tensor containing the result
         """
-        other = other if isinstance(other, Tensor) else Tensor(other)
-        return self * other**-1
+        if not isinstance(other, Tensor):
+            other = Tensor(other)
+
+        # Use multiplication by reciprocal
+        return self * (other**-1)
 
     def __rtruediv__(self, other):
         """Handle right division (scalar / tensor)."""
-        other = other if isinstance(other, Tensor) else Tensor(other)
-        return other * self**-1
+        if not isinstance(other, Tensor):
+            other = Tensor(other)
+        return other / self
 
-    def __pow__(self, power):
+    def __pow__(self, other):
         """
-        Raise this tensor to a power.
+        Raise tensor to the power of another tensor or scalar.
 
         Args:
-            power: Exponent value
+            other: Another tensor or scalar value
 
         Returns:
             A new tensor containing the result
         """
-        if isinstance(power, Tensor):
-            raise NotImplementedError("Tensor powers not yet supported")
+        if not isinstance(other, Tensor):
+            other = Tensor(other)
 
-        if not self.requires_grad:
-            return Tensor(self.data**power)
-
-        # For now, handle this directly since we haven't defined a Power function
-        out = Tensor(self.data**power, requires_grad=self.requires_grad)
-
-        def _backward():
-            if self.requires_grad and out.grad is not None:
-                grad = power * self.data ** (power - 1) * out.grad
-                self.grad = grad if self.grad is None else self.grad + grad
-
-        out._backward = _backward
-        out._prev = {self}
-        return out
+        # Use exp and log: a^b = exp(b * log(a))
+        return (other * self.log()).exp()
 
     def __matmul__(self, other):
         """

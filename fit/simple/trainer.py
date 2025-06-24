@@ -9,19 +9,19 @@ import numpy as np
 from typing import Union, Optional, List, Dict, Any, Callable
 import time
 
-from core.tensor import Tensor
-from nn.modules.container import Sequential
-from nn.modules.linear import Linear
-from nn.modules.activation import ReLU, Softmax, Tanh
-from nn.modules.normalization import BatchNorm
-from loss.classification import CrossEntropyLoss
-from loss.regression import MSELoss
-from optim.adam import Adam
-from optim.sgd import SGD, SGDMomentum
-from optim.experimental.sam import SAM
-from data.dataset import Dataset
-from data.dataloader import DataLoader
-from monitor.tracker import TrainingTracker
+from fit.core.tensor import Tensor
+from fit.nn.modules.container import Sequential
+from fit.nn.modules.linear import Linear
+from fit.nn.modules.activation import ReLU, Softmax, Tanh
+from fit.nn.modules.normalization import BatchNorm
+from fit.loss.classification import CrossEntropyLoss
+from fit.loss.regression import MSELoss
+from fit.optim.adam import Adam
+from fit.optim.sgd import SGD, SGDMomentum
+from fit.optim.experimental.sam import SAM
+from fit.data.dataset import Dataset
+from fit.data.dataloader import DataLoader
+from fit.monitor.tracker import TrainingTracker
 
 
 class SimpleTrainer:
@@ -96,422 +96,407 @@ class SimpleTrainer:
 
         if isinstance(data, tuple) and len(data) == 2:
             X, y = data
-            batch_size = self.kwargs.get("batch_size", 32)
             dataset = Dataset(X, y)
+            batch_size = self.kwargs.get("batch_size", 32)
             return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
 
-        raise ValueError("Data must be (X, y) tuple or DataLoader")
+        raise ValueError("Data must be a tuple (X, y) or DataLoader")
 
     def _setup_loss(self, loss):
-        """Set up loss function with smart defaults."""
+        """Set up loss function."""
         if isinstance(loss, str):
             if loss == "auto":
-                # Auto-detect based on model output
-                return self._auto_detect_loss()
-            elif loss == "mse":
+                # Try to infer from model output size
+                return self._infer_loss()
+            elif loss.lower() in ["mse", "mean_squared_error"]:
                 return MSELoss()
-            elif loss == "crossentropy":
+            elif loss.lower() in ["crossentropy", "cross_entropy", "ce"]:
                 return CrossEntropyLoss()
             else:
-                raise ValueError(f"Unknown loss: {loss}")
+                raise ValueError(f"Unknown loss function: {loss}")
         else:
             return loss
 
-    def _auto_detect_loss(self):
-        """Automatically detect appropriate loss function."""
-        # Simple heuristic: if output size > 1, assume classification
-        # This could be made smarter by examining the data
+    def _infer_loss(self):
+        """Infer appropriate loss function from model."""
+        # Get a sample from the data to test model output
         try:
-            # Get a sample to test model output
-            sample_x, sample_y = next(iter(self.train_loader))
-            output = self.model(sample_x[:1])  # Single sample
+            sample_batch = next(iter(self.train_loader))
+            sample_x, sample_y = sample_batch
 
-            if output.data.shape[-1] > 1:
-                return CrossEntropyLoss()
-            else:
+            output = self.model(sample_x)
+            output_size = output.data.shape[-1]
+
+            # If output is single value, use MSE
+            if output_size == 1:
                 return MSELoss()
-        except:
-            # Default to MSE if we can't determine
+            # If output is multi-class, use CrossEntropy
+            else:
+                return CrossEntropyLoss()
+
+        except Exception:
+            # Default to MSE if we can't infer
+            print("Warning: Could not infer loss function, defaulting to MSE")
             return MSELoss()
 
     def _setup_optimizer(self, optimizer):
-        """Set up optimizer with smart defaults."""
+        """Set up optimizer."""
         lr = self.kwargs.get("lr", 0.001)
 
         if isinstance(optimizer, str):
-            if optimizer == "adam":
+            if optimizer.lower() == "adam":
                 return Adam(self.model.parameters(), lr=lr)
-            elif optimizer == "sgd":
-                momentum = self.kwargs.get("momentum", 0.9)
-                return SGDMomentum(self.model.parameters(), lr=lr, momentum=momentum)
-            elif optimizer == "sam":
-                base_opt = Adam(self.model.parameters(), lr=lr)
+            elif optimizer.lower() == "sgd":
+                momentum = self.kwargs.get("momentum", 0.0)
+                if momentum > 0:
+                    return SGDMomentum(
+                        self.model.parameters(), lr=lr, momentum=momentum
+                    )
+                else:
+                    return SGD(self.model.parameters(), lr=lr)
+            elif optimizer.lower() == "sam":
+                base_opt = self.kwargs.get("base_optimizer", "sgd")
                 rho = self.kwargs.get("rho", 0.05)
-                return SAM(self.model.parameters(), base_opt, rho=rho)
+
+                if base_opt.lower() == "adam":
+                    base = Adam(self.model.parameters(), lr=lr)
+                else:
+                    base = SGD(self.model.parameters(), lr=lr)
+
+                return SAM(self.model.parameters(), base, rho=rho)
             else:
                 raise ValueError(f"Unknown optimizer: {optimizer}")
         else:
             return optimizer
 
-    def _setup_callbacks(self, callback_names):
-        """Set up callbacks from names."""
-        callbacks = {}
+    def _setup_callbacks(self, callbacks):
+        """Set up training callbacks."""
+        callback_instances = []
 
-        for name in callback_names:
-            if name == "early_stopping":
-                callbacks["early_stopping"] = {
-                    "patience": self.kwargs.get("patience", 10),
-                    "min_delta": self.kwargs.get("min_delta", 0.001),
-                }
-            elif name == "lr_scheduler":
-                callbacks["lr_scheduler"] = {
-                    "factor": self.kwargs.get("lr_factor", 0.5),
-                    "patience": self.kwargs.get("lr_patience", 5),
-                }
+        for callback in callbacks:
+            if callback == "early_stopping":
+                # Early stopping will be handled by tracker
+                continue
+            elif callback == "lr_scheduler":
+                # Could implement learning rate scheduling here
+                continue
 
-        return callbacks
+        return callback_instances
 
     def _get_early_stopping_config(self):
         """Get early stopping configuration."""
-        if "early_stopping" in self.callbacks:
-            return self.callbacks["early_stopping"]
+        if "early_stopping" in self.kwargs:
+            return {
+                "patience": self.kwargs.get("patience", 10),
+                "min_delta": self.kwargs.get("min_delta", 1e-4),
+                "metric": self.kwargs.get("monitor", "val_loss"),
+            }
         return None
 
-    def fit(
-        self,
-        epochs: int = 10,
-        verbose: bool = True,
-        validation_freq: int = 1,
-        save_best: bool = True,
-        **kwargs,
-    ):
+    def fit(self, epochs: int = 100, verbose: int = 1):
         """
         Train the model.
 
         Args:
             epochs: Number of epochs to train
-            verbose: Whether to print progress
-            validation_freq: How often to run validation
-            save_best: Whether to save the best model
-            **kwargs: Additional arguments
+            verbose: Verbosity level (0=silent, 1=progress bar, 2=one line per epoch)
+
+        Returns:
+            Training history dictionary
         """
-        if verbose:
-            print(f"🚀 Starting training for {epochs} epochs...")
-            print(f"📊 Model: {self.model.__class__.__name__}")
-            print(f"🔧 Optimizer: {self.optimizer.__class__.__name__}")
-            print(f"📉 Loss: {self.loss_fn.__class__.__name__}")
-            if self.val_loader:
-                print(f"✅ Validation data: {len(self.val_loader)} batches")
-            print("-" * 50)
+        print(f"Starting training for {epochs} epochs...")
+        print(f"Model: {self.model.__class__.__name__}")
+        print(f"Optimizer: {self.optimizer.__class__.__name__}")
+        print(f"Loss: {self.loss_fn.__class__.__name__}")
+        print(f"Batch size: {self.train_loader.batch_size}")
+        print("-" * 50)
 
-        best_val_loss = float("inf")
-        best_model_state = None
+        history = {"train_loss": [], "val_loss": [], "val_accuracy": []}
 
-        for epoch in range(1, epochs + 1):
-            # Start epoch timing
-            self.tracker.start_epoch()
-
+        for epoch in range(epochs):
             # Training phase
-            train_metrics = self._train_epoch()
+            train_loss = self._train_epoch(epoch, verbose)
+            history["train_loss"].append(train_loss)
 
             # Validation phase
-            val_metrics = {}
-            if self.val_loader and epoch % validation_freq == 0:
-                val_metrics = self._validate_epoch()
+            if self.val_loader:
+                val_loss, val_acc = self._validate_epoch(epoch, verbose)
+                history["val_loss"].append(val_loss)
+                history["val_accuracy"].append(val_acc)
+            else:
+                val_loss, val_acc = None, None
 
-                # Save best model
-                if save_best and val_metrics.get("loss", float("inf")) < best_val_loss:
-                    best_val_loss = val_metrics["loss"]
-                    best_model_state = self._get_model_state()
+            # Update tracker
+            metrics = {"train_loss": train_loss}
+            if val_loss is not None:
+                metrics["val_loss"] = val_loss
+            if val_acc is not None:
+                metrics["val_accuracy"] = val_acc
 
-            # Update learning rate if scheduler is enabled
-            if "lr_scheduler" in self.callbacks:
-                self._update_lr_scheduler(val_metrics.get("loss"))
-
-            # Log metrics
-            current_lr = getattr(self.optimizer, "lr", None)
-            custom_metrics = {f"val_{k}": v for k, v in val_metrics.items()}
-
-            self.tracker.log(
-                loss=train_metrics["loss"],
-                acc=train_metrics.get("accuracy"),
-                lr=current_lr,
-                custom_metrics=custom_metrics,
-            )
+            should_stop = self.tracker.update(epoch, metrics)
 
             # Print progress
-            if verbose:
-                self._print_epoch_progress(epoch, epochs, train_metrics, val_metrics)
+            if verbose >= 1:
+                self._print_epoch_results(epoch, train_loss, val_loss, val_acc)
 
-            # Check early stopping
-            if self.tracker.should_early_stop():
-                if verbose:
-                    print(f"\n⏰ Early stopping triggered at epoch {epoch}")
+            # Early stopping
+            if should_stop:
+                print(f"Early stopping at epoch {epoch + 1}")
                 break
 
-        # Restore best model if saved
-        if save_best and best_model_state:
-            self._restore_model_state(best_model_state)
-            if verbose:
-                print(f"📦 Restored best model (val_loss: {best_val_loss:.4f})")
+        print("Training completed!")
+        return history
 
-        if verbose:
-            print("\n🎉 Training completed!")
-            self.tracker.summary(style="box")
-
-        return self.tracker
-
-    def _train_epoch(self):
+    def _train_epoch(self, epoch, verbose):
         """Train for one epoch."""
         self.model.train()
+        total_loss = 0.0
+        batch_count = 0
 
-        total_loss = 0
-        correct = 0
-        total = 0
+        for batch_idx, (batch_x, batch_y) in enumerate(self.train_loader):
+            # Zero gradients
+            for param in self.model.parameters():
+                param.grad = None
 
-        for x, y in self.train_loader:
-            # Handle SAM optimizer
+            # Forward pass
+            output = self.model(batch_x)
+            loss = self.loss_fn(output, batch_y)
+
+            # Backward pass
+            loss.backward()
+
+            # Optimizer step (handle SAM specially)
             if isinstance(self.optimizer, SAM):
+                self.optimizer.first_step(zero_grad=True)
 
-                def closure():
-                    self.optimizer.zero_grad()
-                    outputs = self.model(x)
-                    loss = self.loss_fn(outputs, y)
-                    loss.backward()
-                    return loss
+                # Second forward pass for SAM
+                output2 = self.model(batch_x)
+                loss2 = self.loss_fn(output2, batch_y)
+                loss2.backward()
 
-                loss = self.optimizer.first_step(closure)
-                loss = self.optimizer.second_step(closure)
-                outputs = self.model(x)
+                self.optimizer.second_step(zero_grad=True)
             else:
-                # Standard training
-                self.optimizer.zero_grad()
-                outputs = self.model(x)
-                loss = self.loss_fn(outputs, y)
-                loss.backward()
                 self.optimizer.step()
 
-            # Update metrics
-            batch_size = x.data.shape[0]
-            total_loss += float(loss.data) * batch_size
-            total += batch_size
+            total_loss += loss.data
+            batch_count += 1
 
-            # Calculate accuracy for classification
-            if (
-                "accuracy" in self.metrics
-                and outputs.data.ndim > 1
-                and outputs.data.shape[1] > 1
-            ):
-                predictions = np.argmax(outputs.data, axis=1)
-                targets = (
-                    y.data.astype(np.int32)
-                    if y.data.ndim == 1
-                    else np.argmax(y.data, axis=1)
-                )
-                correct += np.sum(predictions == targets)
+        return total_loss / batch_count
 
-        metrics = {
-            "loss": total_loss / total,
-        }
-
-        if "accuracy" in self.metrics and total > 0:
-            metrics["accuracy"] = correct / total
-
-        return metrics
-
-    def _validate_epoch(self):
+    def _validate_epoch(self, epoch, verbose):
         """Validate for one epoch."""
         self.model.eval()
-
-        total_loss = 0
+        total_loss = 0.0
         correct = 0
         total = 0
+        batch_count = 0
 
-        for x, y in self.val_loader:
-            outputs = self.model(x)
-            loss = self.loss_fn(outputs, y)
+        for batch_x, batch_y in self.val_loader:
+            # Forward pass (no gradients needed)
+            output = self.model(batch_x)
+            loss = self.loss_fn(output, batch_y)
 
-            # Update metrics
-            batch_size = x.data.shape[0]
-            total_loss += float(loss.data) * batch_size
-            total += batch_size
+            total_loss += loss.data
+            batch_count += 1
 
-            # Calculate accuracy for classification
-            if (
-                "accuracy" in self.metrics
-                and outputs.data.ndim > 1
-                and outputs.data.shape[1] > 1
-            ):
-                predictions = np.argmax(outputs.data, axis=1)
-                targets = (
-                    y.data.astype(np.int32)
-                    if y.data.ndim == 1
-                    else np.argmax(y.data, axis=1)
-                )
+            # Calculate accuracy
+            if "accuracy" in self.metrics:
+                predictions = np.argmax(output.data, axis=1)
+                targets = batch_y.data if hasattr(batch_y, "data") else batch_y
+
                 correct += np.sum(predictions == targets)
+                total += len(targets)
 
-        metrics = {
-            "loss": total_loss / total,
+        avg_loss = total_loss / batch_count
+        accuracy = correct / total if total > 0 else 0.0
+
+        return avg_loss, accuracy
+
+    def _print_epoch_results(self, epoch, train_loss, val_loss, val_acc):
+        """Print results for one epoch."""
+        msg = f"Epoch {epoch + 1}: train_loss={train_loss:.4f}"
+
+        if val_loss is not None:
+            msg += f", val_loss={val_loss:.4f}"
+        if val_acc is not None:
+            msg += f", val_acc={val_acc:.4f}"
+
+        print(msg)
+
+    def evaluate(self, test_data: Union[tuple, DataLoader]) -> Dict[str, float]:
+        """
+        Evaluate the model on test data.
+
+        Args:
+            test_data: Test data as (X, y) tuple or DataLoader
+
+        Returns:
+            Dictionary with evaluation metrics
+        """
+        test_loader = self._setup_data(test_data, shuffle=False)
+
+        self.model.eval()
+        total_loss = 0.0
+        correct = 0
+        total = 0
+        batch_count = 0
+
+        print("Evaluating model...")
+
+        for batch_x, batch_y in test_loader:
+            output = self.model(batch_x)
+            loss = self.loss_fn(output, batch_y)
+
+            total_loss += loss.data
+            batch_count += 1
+
+            # Calculate accuracy
+            predictions = np.argmax(output.data, axis=1)
+            targets = batch_y.data if hasattr(batch_y, "data") else batch_y
+
+            correct += np.sum(predictions == targets)
+            total += len(targets)
+
+        results = {
+            "test_loss": total_loss / batch_count,
+            "test_accuracy": correct / total,
         }
 
-        if "accuracy" in self.metrics and total > 0:
-            metrics["accuracy"] = correct / total
+        print("Evaluation Results:")
+        for metric, value in results.items():
+            print(f"  {metric}: {value:.4f}")
 
-        return metrics
+        return results
 
-    def _print_epoch_progress(self, epoch, total_epochs, train_metrics, val_metrics):
-        """Print training progress."""
-        progress = f"Epoch {epoch:3d}/{total_epochs}"
+    def predict(self, X):
+        """
+        Make predictions on new data.
 
-        # Training metrics
-        train_str = f"train_loss: {train_metrics['loss']:.4f}"
-        if "accuracy" in train_metrics:
-            train_str += f", train_acc: {train_metrics['accuracy']:.3f}"
+        Args:
+            X: Input data
 
-        # Validation metrics
-        val_str = ""
-        if val_metrics:
-            val_str = f", val_loss: {val_metrics['loss']:.4f}"
-            if "accuracy" in val_metrics:
-                val_str += f", val_acc: {val_metrics['accuracy']:.3f}"
+        Returns:
+            Predictions as numpy array
+        """
+        self.model.eval()
 
-        print(f"{progress} - {train_str}{val_str}")
+        if isinstance(X, np.ndarray):
+            X = Tensor(X, requires_grad=False)
 
-    def _update_lr_scheduler(self, val_loss):
-        """Update learning rate based on validation loss."""
-        # Simple implementation - reduce LR on plateau
-        # This could be made more sophisticated
-        pass
+        output = self.model(X)
+        return output.data
 
-    def _get_model_state(self):
-        """Get current model state for saving."""
-        # Simple state saving - could be improved
-        return {param: param.data.copy() for param in self.model.parameters()}
+    def save(self, filepath: str):
+        """Save the trained model."""
+        from fit.nn.utils.model_io import save_model
 
-    def _restore_model_state(self, state):
-        """Restore model state."""
-        for param, saved_data in zip(self.model.parameters(), state.values()):
-            param.data = saved_data
+        save_model(self.model, filepath)
+        print(f"Model saved to {filepath}")
+
+    def load(self, filepath: str):
+        """Load a trained model."""
+        from fit.nn.utils.model_io import load_model
+
+        self.model = load_model(filepath)
+        print(f"Model loaded from {filepath}")
 
 
-def train(
+# Convenience functions for quick training
+def fit_classifier(
     model,
-    data: Union[tuple, DataLoader],
-    epochs: int = 10,
-    validation_data: Optional[Union[tuple, DataLoader]] = None,
-    loss: str = "auto",
-    optimizer: str = "adam",
-    lr: float = 0.001,
-    batch_size: int = 32,
-    callbacks: Optional[List[str]] = None,
-    verbose: bool = True,
+    train_data,
+    validation_data=None,
+    epochs=100,
+    lr=0.001,
+    batch_size=32,
+    optimizer="adam",
     **kwargs,
-) -> TrainingTracker:
+):
     """
-    High-level training function - train any model in one line!
+    Quick function to train a classification model.
 
     Args:
         model: Model to train
-        data: Training data as (X, y) tuple or DataLoader
-        epochs: Number of epochs
+        train_data: Training data as (X, y) tuple
         validation_data: Validation data (optional)
-        loss: Loss function ('auto', 'mse', 'crossentropy')
-        optimizer: Optimizer ('adam', 'sgd', 'sam')
+        epochs: Number of epochs
         lr: Learning rate
-        batch_size: Batch size (if data is tuple)
-        callbacks: List of callbacks ['early_stopping', 'lr_scheduler']
-        verbose: Whether to print progress
+        batch_size: Batch size
+        optimizer: Optimizer name or instance
         **kwargs: Additional arguments
 
     Returns:
-        TrainingTracker with training history
-
-    Examples:
-        # Simple training
-        >>> tracker = fit.train(model, (X_train, y_train), epochs=50)
-
-        # With validation and callbacks
-        >>> tracker = fit.train(
-        ...     model, (X_train, y_train),
-        ...     validation_data=(X_val, y_val),
-        ...     optimizer='sam',
-        ...     callbacks=['early_stopping'],
-        ...     epochs=100
-        ... )
+        Trained model and training history
     """
     trainer = SimpleTrainer(
         model=model,
-        data=data,
+        data=train_data,
         validation_data=validation_data,
-        loss=loss,
+        loss="crossentropy",
         optimizer=optimizer,
         lr=lr,
         batch_size=batch_size,
-        callbacks=callbacks,
         **kwargs,
     )
 
-    return trainer.fit(epochs=epochs, verbose=verbose)
+    history = trainer.fit(epochs=epochs)
+    return trainer.model, history
 
 
-def quick_evaluate(
-    model, data: Union[tuple, DataLoader], metrics: List[str] = None
-) -> Dict[str, float]:
+def fit_regressor(
+    model,
+    train_data,
+    validation_data=None,
+    epochs=100,
+    lr=0.001,
+    batch_size=32,
+    optimizer="adam",
+    **kwargs,
+):
     """
-    Quickly evaluate a model on test data.
+    Quick function to train a regression model.
 
     Args:
-        model: Trained model
-        data: Test data as (X, y) tuple or DataLoader
-        metrics: Metrics to compute ['loss', 'accuracy']
+        model: Model to train
+        train_data: Training data as (X, y) tuple
+        validation_data: Validation data (optional)
+        epochs: Number of epochs
+        lr: Learning rate
+        batch_size: Batch size
+        optimizer: Optimizer name or instance
+        **kwargs: Additional arguments
 
     Returns:
-        Dictionary of computed metrics
+        Trained model and training history
     """
-    if isinstance(data, tuple):
-        X, y = data
-        dataset = Dataset(X, y)
-        data_loader = DataLoader(dataset, batch_size=32, shuffle=False)
-    else:
-        data_loader = data
+    trainer = SimpleTrainer(
+        model=model,
+        data=train_data,
+        validation_data=validation_data,
+        loss="mse",
+        optimizer=optimizer,
+        lr=lr,
+        batch_size=batch_size,
+        **kwargs,
+    )
 
-    model.eval()
-    metrics = metrics or ["loss", "accuracy"]
+    history = trainer.fit(epochs=epochs)
+    return trainer.model, history
 
-    # Auto-detect loss function
-    sample_x, sample_y = next(iter(data_loader))
-    output = model(sample_x[:1])
-    if output.data.shape[-1] > 1:
-        loss_fn = CrossEntropyLoss()
-    else:
-        loss_fn = MSELoss()
 
-    total_loss = 0
-    correct = 0
-    total = 0
+def quick_train(model, X, y, **kwargs):
+    """
+    Ultra-simple training function.
 
-    for x, y in data_loader:
-        outputs = model(x)
+    Args:
+        model: Model to train
+        X: Input features
+        y: Target labels
+        **kwargs: Training parameters
 
-        if "loss" in metrics:
-            loss = loss_fn(outputs, y)
-            total_loss += float(loss.data) * x.data.shape[0]
-
-        if "accuracy" in metrics and outputs.data.ndim > 1:
-            predictions = np.argmax(outputs.data, axis=1)
-            targets = (
-                y.data.astype(np.int32)
-                if y.data.ndim == 1
-                else np.argmax(y.data, axis=1)
-            )
-            correct += np.sum(predictions == targets)
-
-        total += x.data.shape[0]
-
-    results = {}
-    if "loss" in metrics:
-        results["loss"] = total_loss / total
-    if "accuracy" in metrics and total > 0:
-        results["accuracy"] = correct / total
-
-    return results
+    Returns:
+        Trained model
+    """
+    trainer = SimpleTrainer(model=model, data=(X, y), **kwargs)
+    trainer.fit(epochs=kwargs.get("epochs", 50))
+    return trainer.model

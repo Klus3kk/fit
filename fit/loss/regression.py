@@ -1,183 +1,419 @@
 """
-Regression loss functions for the FIT framework.
+Regression loss functions.
 """
 
 import numpy as np
-
-from core.tensor import Tensor
-from nn.modules.base import Layer
+from fit.core.tensor import Tensor
 
 
-class MSELoss(Layer):
-    """Mean Squared Error loss function."""
+class MSELoss:
+    """
+    Mean Squared Error loss for regression.
 
-    def forward(self, prediction: Tensor, target: Tensor):
+    L(y, ŷ) = (1/n) * Σ(y - ŷ)²
+    """
+
+    def __init__(self, reduction="mean"):
+        """
+        Initialize MSELoss.
+
+        Args:
+            reduction: Reduction method ('mean', 'sum', or 'none')
+        """
+        self.reduction = reduction
+
+    def __call__(self, predictions: Tensor, targets: Tensor) -> Tensor:
         """
         Compute mean squared error loss.
 
         Args:
-            prediction: Predicted values
-            target: Target values
+            predictions: Predicted values
+            targets: Target values
 
         Returns:
-            Tensor containing the MSE loss
+            Loss tensor
         """
-        # Ensure target is a tensor (but don't convert if already a Tensor)
-        if not isinstance(target, Tensor):
-            target = Tensor(target)
+        return self.forward(predictions, targets)
 
-        # Calculate difference
-        diff = prediction - target
-
-        # Square the differences
+    def forward(self, predictions: Tensor, targets: Tensor) -> Tensor:
+        """Forward pass of MSE loss."""
+        # Compute squared differences
+        diff = predictions - targets
         squared_diff = diff * diff
 
-        # Calculate mean manually to avoid issues
-        loss_value = np.mean(squared_diff.data)
-
-        # Create result tensor
-        result = Tensor(loss_value, requires_grad=prediction.requires_grad)
-
-        if prediction.requires_grad:
-
-            def _backward():
-                if result.grad is not None:
-                    # Gradient of MSE: 2 * (prediction - target) / n
-                    n_elements = np.prod(prediction.data.shape)
-                    grad = 2.0 * diff.data / n_elements
-
-                    # Scale by upstream gradient (usually 1.0 for loss)
-                    final_grad = grad * result.grad
-
-                    # Accumulate gradients
-                    if prediction.grad is None:
-                        prediction.grad = final_grad
-                    else:
-                        prediction.grad = prediction.grad + final_grad
-
-            result._backward = _backward
-            result._prev = {prediction}
-
-        return result
+        # Apply reduction
+        if self.reduction == "mean":
+            return squared_diff.mean()
+        elif self.reduction == "sum":
+            return squared_diff.sum()
+        else:  # 'none'
+            return squared_diff
 
 
-class MAELoss(Layer):
-    """Mean Absolute Error loss function."""
+class MAELoss:
+    """
+    Mean Absolute Error loss for regression.
 
-    def forward(self, prediction: Tensor, target: Tensor):
+    L(y, ŷ) = (1/n) * Σ|y - ŷ|
+    """
+
+    def __init__(self, reduction="mean"):
+        """
+        Initialize MAELoss.
+
+        Args:
+            reduction: Reduction method ('mean', 'sum', or 'none')
+        """
+        self.reduction = reduction
+
+    def __call__(self, predictions: Tensor, targets: Tensor) -> Tensor:
         """
         Compute mean absolute error loss.
 
         Args:
-            prediction: Predicted values
-            target: Target values
+            predictions: Predicted values
+            targets: Target values
 
         Returns:
-            Tensor containing the MAE loss
+            Loss tensor
         """
-        # Ensure target is a tensor
-        if not isinstance(target, Tensor):
-            target = Tensor(target)
+        return self.forward(predictions, targets)
 
-        # Calculate difference
-        diff = prediction - target
+    def forward(self, predictions: Tensor, targets: Tensor) -> Tensor:
+        """Forward pass of MAE loss."""
+        # Compute absolute differences
+        diff = predictions - targets
+        abs_diff = Tensor(np.abs(diff.data), requires_grad=diff.requires_grad)
 
-        # Calculate absolute differences manually
-        abs_diff_data = np.abs(diff.data)
+        def _backward():
+            if diff.requires_grad and abs_diff.grad is not None:
+                # Gradient of abs(x) is sign(x)
+                grad = abs_diff.grad * np.sign(diff.data)
+                diff.grad = grad if diff.grad is None else diff.grad + grad
 
-        # Calculate mean
-        loss_value = np.mean(abs_diff_data)
+        abs_diff._backward = _backward
+        abs_diff._prev = {diff}
 
-        # Create result tensor
-        result = Tensor(loss_value, requires_grad=prediction.requires_grad)
-
-        if prediction.requires_grad:
-
-            def _backward():
-                if result.grad is not None:
-                    # Gradient of MAE: sign(prediction - target) / n
-                    n_elements = np.prod(prediction.data.shape)
-                    grad = np.sign(diff.data) / n_elements
-
-                    # Scale by upstream gradient
-                    final_grad = grad * result.grad
-
-                    # Accumulate gradients
-                    if prediction.grad is None:
-                        prediction.grad = final_grad
-                    else:
-                        prediction.grad = prediction.grad + final_grad
-
-            result._backward = _backward
-            result._prev = {prediction}
-
-        return result
+        # Apply reduction
+        if self.reduction == "mean":
+            return abs_diff.mean()
+        elif self.reduction == "sum":
+            return abs_diff.sum()
+        else:  # 'none'
+            return abs_diff
 
 
-class HuberLoss(Layer):
-    """Huber loss function (smooth L1 loss)."""
+class SmoothL1Loss:
+    """
+    Smooth L1 Loss (Huber Loss) for regression.
 
-    def __init__(self, delta=1.0):
+    Less sensitive to outliers than MSE.
+    L(x) = 0.5*x² if |x| < β
+           β*|x| - 0.5*β² otherwise
+    """
+
+    def __init__(self, beta=1.0, reduction="mean"):
         """
-        Initialize Huber loss.
+        Initialize SmoothL1Loss.
 
         Args:
-            delta: Threshold parameter
+            beta: Threshold for switching between L2 and L1 loss
+            reduction: Reduction method ('mean', 'sum', or 'none')
         """
-        super().__init__()
-        self.delta = delta
+        self.beta = beta
+        self.reduction = reduction
 
-    def forward(self, prediction: Tensor, target: Tensor):
+    def __call__(self, predictions: Tensor, targets: Tensor) -> Tensor:
+        """
+        Compute smooth L1 loss.
+
+        Args:
+            predictions: Predicted values
+            targets: Target values
+
+        Returns:
+            Loss tensor
+        """
+        return self.forward(predictions, targets)
+
+    def forward(self, predictions: Tensor, targets: Tensor) -> Tensor:
+        """Forward pass of Smooth L1 loss."""
+        diff = predictions - targets
+        abs_diff = np.abs(diff.data)
+
+        # Smooth L1 loss
+        loss_data = np.where(
+            abs_diff < self.beta,
+            0.5 * diff.data * diff.data / self.beta,
+            abs_diff - 0.5 * self.beta,
+        )
+
+        loss_tensor = Tensor(loss_data, requires_grad=diff.requires_grad)
+
+        def _backward():
+            if diff.requires_grad and loss_tensor.grad is not None:
+                # Gradient computation
+                grad = np.where(
+                    abs_diff < self.beta, diff.data / self.beta, np.sign(diff.data)
+                )
+                grad = grad * loss_tensor.grad
+                diff.grad = grad if diff.grad is None else diff.grad + grad
+
+        loss_tensor._backward = _backward
+        loss_tensor._prev = {diff}
+
+        # Apply reduction
+        if self.reduction == "mean":
+            return loss_tensor.mean()
+        elif self.reduction == "sum":
+            return loss_tensor.sum()
+        else:  # 'none'
+            return loss_tensor
+
+
+class HuberLoss:
+    """
+    Huber Loss for regression.
+
+    Combines MSE and MAE - quadratic for small errors, linear for large errors.
+    """
+
+    def __init__(self, delta=1.0, reduction="mean"):
+        """
+        Initialize Huber Loss.
+
+        Args:
+            delta: Threshold for switching between quadratic and linear
+            reduction: Reduction method ('mean', 'sum', or 'none')
+        """
+        self.delta = delta
+        self.reduction = reduction
+
+    def __call__(self, predictions: Tensor, targets: Tensor) -> Tensor:
         """
         Compute Huber loss.
 
         Args:
-            prediction: Predicted values
-            target: Target values
+            predictions: Predicted values
+            targets: Target values
 
         Returns:
-            Tensor containing the Huber loss
+            Loss tensor
         """
-        # Ensure target is a tensor
-        if not isinstance(target, Tensor):
-            target = Tensor(target)
+        return self.forward(predictions, targets)
 
-        # Calculate difference
-        diff = prediction - target
+    def forward(self, predictions: Tensor, targets: Tensor) -> Tensor:
+        """Forward pass of Huber loss."""
+        diff = predictions - targets
         abs_diff = np.abs(diff.data)
 
-        # Calculate Huber loss
-        mask = abs_diff <= self.delta
+        # Huber loss
         loss_data = np.where(
-            mask, 0.5 * diff.data**2, self.delta * abs_diff - 0.5 * self.delta**2
+            abs_diff <= self.delta,
+            0.5 * diff.data * diff.data,
+            self.delta * abs_diff - 0.5 * self.delta * self.delta,
         )
 
-        loss_value = np.mean(loss_data)
+        loss_tensor = Tensor(loss_data, requires_grad=diff.requires_grad)
 
-        # Create result tensor
-        result = Tensor(loss_value, requires_grad=prediction.requires_grad)
+        def _backward():
+            if diff.requires_grad and loss_tensor.grad is not None:
+                # Gradient computation
+                grad = np.where(
+                    abs_diff <= self.delta, diff.data, self.delta * np.sign(diff.data)
+                )
+                grad = grad * loss_tensor.grad
+                diff.grad = grad if diff.grad is None else diff.grad + grad
 
-        if prediction.requires_grad:
+        loss_tensor._backward = _backward
+        loss_tensor._prev = {diff}
 
-            def _backward():
-                if result.grad is not None:
-                    # Gradient of Huber loss
-                    n_elements = np.prod(prediction.data.shape)
-                    grad = (
-                        np.where(mask, diff.data, self.delta * np.sign(diff.data))
-                        / n_elements
-                    )
+        # Apply reduction
+        if self.reduction == "mean":
+            return loss_tensor.mean()
+        elif self.reduction == "sum":
+            return loss_tensor.sum()
+        else:  # 'none'
+            return loss_tensor
 
-                    # Scale by upstream gradient
-                    final_grad = grad * result.grad
 
-                    # Accumulate gradients
-                    if prediction.grad is None:
-                        prediction.grad = final_grad
-                    else:
-                        prediction.grad = prediction.grad + final_grad
+class LogCoshLoss:
+    """
+    Logarithm of the hyperbolic cosine loss.
 
-            result._backward = _backward
-            result._prev = {prediction}
+    Smooth approximation to MAE that is less sensitive to outliers than MSE.
+    """
 
-        return result
+    def __init__(self, reduction="mean"):
+        """
+        Initialize LogCosh Loss.
+
+        Args:
+            reduction: Reduction method ('mean', 'sum', or 'none')
+        """
+        self.reduction = reduction
+
+    def __call__(self, predictions: Tensor, targets: Tensor) -> Tensor:
+        """
+        Compute log-cosh loss.
+
+        Args:
+            predictions: Predicted values
+            targets: Target values
+
+        Returns:
+            Loss tensor
+        """
+        return self.forward(predictions, targets)
+
+    def forward(self, predictions: Tensor, targets: Tensor) -> Tensor:
+        """Forward pass of log-cosh loss."""
+        diff = predictions - targets
+
+        # log(cosh(x)) = log((e^x + e^-x)/2) = log(e^x + e^-x) - log(2)
+        # For numerical stability, use: log(cosh(x)) = |x| + log(1 + exp(-2|x|)) - log(2)
+        abs_diff = np.abs(diff.data)
+        loss_data = abs_diff + np.log(1 + np.exp(-2 * abs_diff)) - np.log(2)
+
+        loss_tensor = Tensor(loss_data, requires_grad=diff.requires_grad)
+
+        def _backward():
+            if diff.requires_grad and loss_tensor.grad is not None:
+                # Gradient of log(cosh(x)) is tanh(x)
+                grad = np.tanh(diff.data) * loss_tensor.grad
+                diff.grad = grad if diff.grad is None else diff.grad + grad
+
+        loss_tensor._backward = _backward
+        loss_tensor._prev = {diff}
+
+        # Apply reduction
+        if self.reduction == "mean":
+            return loss_tensor.mean()
+        elif self.reduction == "sum":
+            return loss_tensor.sum()
+        else:  # 'none'
+            return loss_tensor
+
+
+class QuantileLoss:
+    """
+    Quantile Loss for quantile regression.
+
+    Allows predicting specific quantiles of the target distribution.
+    """
+
+    def __init__(self, quantile=0.5, reduction="mean"):
+        """
+        Initialize Quantile Loss.
+
+        Args:
+            quantile: Quantile to predict (0 < quantile < 1)
+            reduction: Reduction method ('mean', 'sum', or 'none')
+        """
+        if not 0 < quantile < 1:
+            raise ValueError("Quantile must be between 0 and 1")
+        self.quantile = quantile
+        self.reduction = reduction
+
+    def __call__(self, predictions: Tensor, targets: Tensor) -> Tensor:
+        """
+        Compute quantile loss.
+
+        Args:
+            predictions: Predicted quantile values
+            targets: Target values
+
+        Returns:
+            Loss tensor
+        """
+        return self.forward(predictions, targets)
+
+    def forward(self, predictions: Tensor, targets: Tensor) -> Tensor:
+        """Forward pass of quantile loss."""
+        diff = targets - predictions
+
+        # Quantile loss: max(q*diff, (q-1)*diff)
+        loss_data = np.maximum(
+            self.quantile * diff.data, (self.quantile - 1) * diff.data
+        )
+
+        loss_tensor = Tensor(loss_data, requires_grad=diff.requires_grad)
+
+        def _backward():
+            if diff.requires_grad and loss_tensor.grad is not None:
+                # Gradient is q if diff > 0, else (q-1)
+                grad = np.where(diff.data > 0, self.quantile, self.quantile - 1)
+                # Note: gradient w.r.t. predictions is -grad
+                pred_grad = -grad * loss_tensor.grad
+                predictions.grad = (
+                    pred_grad
+                    if predictions.grad is None
+                    else predictions.grad + pred_grad
+                )
+
+        loss_tensor._backward = _backward
+        loss_tensor._prev = {predictions}
+
+        # Apply reduction
+        if self.reduction == "mean":
+            return loss_tensor.mean()
+        elif self.reduction == "sum":
+            return loss_tensor.sum()
+        else:  # 'none'
+            return loss_tensor
+
+
+class CosineSimilarityLoss:
+    """
+    Cosine Similarity Loss for regression.
+
+    Measures the cosine of the angle between prediction and target vectors.
+    """
+
+    def __init__(self, reduction="mean"):
+        """
+        Initialize Cosine Similarity Loss.
+
+        Args:
+            reduction: Reduction method ('mean', 'sum', or 'none')
+        """
+        self.reduction = reduction
+
+    def __call__(self, predictions: Tensor, targets: Tensor) -> Tensor:
+        """
+        Compute cosine similarity loss.
+
+        Args:
+            predictions: Predicted vectors
+            targets: Target vectors
+
+        Returns:
+            Loss tensor (1 - cosine_similarity)
+        """
+        return self.forward(predictions, targets)
+
+    def forward(self, predictions: Tensor, targets: Tensor) -> Tensor:
+        """Forward pass of cosine similarity loss."""
+        # Cosine similarity = (A·B) / (||A|| * ||B||)
+        dot_product = (predictions * targets).sum(axis=-1, keepdims=True)
+
+        pred_norm = (predictions * predictions).sum(axis=-1, keepdims=True).sqrt()
+        target_norm = (targets * targets).sum(axis=-1, keepdims=True).sqrt()
+
+        # Add small epsilon for numerical stability
+        eps = 1e-8
+        pred_norm = pred_norm + Tensor(eps)
+        target_norm = target_norm + Tensor(eps)
+
+        cosine_sim = dot_product / (pred_norm * target_norm)
+
+        # Loss is 1 - cosine_similarity
+        loss = Tensor(1.0) - cosine_sim
+
+        # Apply reduction
+        if self.reduction == "mean":
+            return loss.mean()
+        elif self.reduction == "sum":
+            return loss.sum()
+        else:  # 'none'
+            return loss
