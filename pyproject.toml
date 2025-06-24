@@ -52,7 +52,7 @@ line-length = 88
 [tool.isort]
 profile = "black"
 
-[tool.mypy]
+[tool.mypy] # type checker
 python_version = "3.8"
 warn_return_any = true
 disallow_untyped_defs = true

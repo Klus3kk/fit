@@ -26,6 +26,10 @@ class Tensor(Node):
         """
         super().__init__(requires_grad=requires_grad)
 
+        # Handle Tensor input by extracting its data
+        if isinstance(data, Tensor):
+            data = data.data
+
         if not isinstance(data, np.ndarray):
             data = np.array(data, dtype=np.float64)  # Use float64 for better precision
         else:
@@ -269,60 +273,13 @@ class Tensor(Node):
         Returns:
             A new tensor with the specified shape
         """
-        # Use the Reshape function from autograd
-        reshape_fn = get_function("reshape")
-        return reshape_fn.forward(self, shape)
-
-    def max(self, axis=None, keepdims=False):
-        """
-        Find maximum values along specified axis.
-
-        Args:
-            axis: Axis along which to find maximum values
-            keepdims: Whether to keep the dimensions
-
-        Returns:
-            A new tensor with maximum values
-        """
-        data = self.data
-        max_data = np.max(data, axis=axis, keepdims=keepdims)
-        out = Tensor(max_data, requires_grad=self.requires_grad)
+        out = Tensor(self.data.reshape(shape), requires_grad=self.requires_grad)
 
         if self.requires_grad:
 
             def _backward():
                 if out.grad is not None:
-                    # Create a mask for the maximum values
-                    mask = np.zeros_like(self.data, dtype=np.float64)
-
-                    if axis is None:
-                        # Single global maximum
-                        mask.flat[np.argmax(self.data)] = 1.0
-                    else:
-                        # Maximum along specified axis
-                        indices = np.argmax(self.data, axis=axis)
-                        if not keepdims:
-                            # Create indices for all dimensions
-                            idx_tuple = []
-                            for i in range(self.data.ndim):
-                                if i == axis:
-                                    idx_tuple.append(indices)
-                                else:
-                                    idx_tuple.append(
-                                        np.arange(self.data.shape[i])[:, None]
-                                    )
-                            # Set corresponding elements to 1.0
-                            mask[tuple(idx_tuple)] = 1.0
-                        else:
-                            # Handle keepdims case
-                            mask = self.data == np.max(
-                                self.data, axis=axis, keepdims=True
-                            )
-
-                    # Apply upstream gradient
-                    grad = mask * (
-                        np.reshape(out.grad, mask.shape) if keepdims else out.grad
-                    )
+                    grad = out.grad.reshape(self.data.shape)
                     self.grad = grad if self.grad is None else self.grad + grad
 
             out._backward = _backward
@@ -330,71 +287,39 @@ class Tensor(Node):
 
         return out
 
-    def relu(self):
-        """
-        Apply ReLU (Rectified Linear Unit) activation to the tensor.
-
-        Returns:
-            A new tensor with ReLU applied
-        """
-        # Use the ReLU function from autograd
-        relu_fn = get_function("relu")
-        return relu_fn.forward(self)
+    def zero_grad(self):
+        """Set the gradient to None."""
+        self.grad = None
 
     def backward(self, gradient=None):
         """
-        Perform backpropagation starting from this tensor.
+        Compute gradients by traversing the computational graph backward.
 
         Args:
-            gradient: Initial gradient value (optional)
+            gradient: Upstream gradient (defaults to ones if None)
         """
-        # Ensure proper shape for scalar gradients
         if gradient is None:
-            if np.isscalar(self.data) or self.data.size == 1:
-                gradient = np.array(1.0)
+            # For scalar tensors, default gradient is 1.0
+            if self.data.ndim == 0:
+                gradient = 1.0
             else:
                 gradient = np.ones_like(self.data)
-        elif np.isscalar(gradient):
-            gradient = np.array(gradient)
 
-        # Initialize gradient
         self.grad = gradient
 
-        # Build topological ordering of the graph
-        topo = []
+        # Topological sort for backward pass
         visited = set()
+        topo = []
 
-        def build_topo(node):
-            if node not in visited:
-                visited.add(node)
-                for child in node._prev:
-                    if child.requires_grad:
-                        build_topo(child)
-                topo.append(node)
+        def build_topo(v):
+            if v not in visited:
+                visited.add(v)
+                for child in v._prev:
+                    build_topo(child)
+                topo.append(v)
 
         build_topo(self)
 
-        # Backpropagate through the graph
+        # Call backward functions in reverse topological order
         for node in reversed(topo):
             node._backward()
-
-    def clip_gradients(self, max_norm):
-        """
-        Clip gradients to prevent exploding gradients.
-
-        Args:
-            max_norm: Maximum gradient norm
-        """
-        if self.grad is None:
-            return
-
-        # Calculate gradient norm
-        grad_norm = np.sqrt(np.sum(np.square(self.grad)))
-
-        # Clip if necessary
-        if grad_norm > max_norm:
-            self.grad = self.grad * (max_norm / (grad_norm + 1e-12))
-
-    def zero_grad(self):
-        """Reset the gradient to None."""
-        self.grad = None
