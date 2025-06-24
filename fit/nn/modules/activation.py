@@ -5,7 +5,7 @@ Implementation of activation functions for neural networks.
 import numpy as np
 
 from core.tensor import Tensor
-from nn.layer import Layer
+from nn.modules.base import Layer
 
 
 class ReLU(Layer):

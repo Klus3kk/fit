@@ -8,7 +8,7 @@ The key changes:
 import numpy as np
 
 from core.tensor import Tensor
-from nn.layer import Layer
+from nn.modules.base import Layer
 
 
 class MSELoss(Layer):

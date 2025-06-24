@@ -141,11 +141,14 @@ class Function:
         # Convert tensor inputs to numpy arrays for computation
         numpy_inputs = []
         for inp in inputs:
-            if isinstance(inp, Tensor):
+            # Check if it's a Tensor by looking for the data attribute
+            if hasattr(inp, 'data') and hasattr(inp, 'requires_grad'):
                 numpy_inputs.append(inp.data)
             else:
                 # Convert non-ndarray inputs to ndarrays
                 if not isinstance(inp, np.ndarray):
+                    if hasattr(inp, 'data'):  # Still a tensor somehow
+                        inp = inp.data
                     inp = np.array(inp, dtype=np.float64)
                 numpy_inputs.append(inp)
 

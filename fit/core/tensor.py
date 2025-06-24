@@ -73,11 +73,12 @@ class Tensor(Node):
             A new tensor containing the result
         """
         # Convert scalar to tensor if needed
-        other = other if isinstance(other, Tensor) else Tensor(other)
-
+        if not isinstance(other, Tensor):
+            other = Tensor(other)
+            
         # Use the Multiply function from autograd
-        mul_fn = get_function("multiply")
-        return mul_fn.forward(self, other)
+        from core.autograd import Multiply
+        return Multiply.forward(self, other)
 
     def __rmul__(self, other):
         """Handle right multiplication (scalar * tensor)."""
@@ -108,7 +109,7 @@ class Tensor(Node):
         Returns:
             A new tensor with negated values
         """
-        return self * -1
+        return self * Tensor(-1)
 
     def __truediv__(self, other):
         """

@@ -1,5 +1,5 @@
 test.py
-*/__pycache__
+__pycache__/
 logs
 fit.egg-info
 .venv
@@ -7,3 +7,4 @@ fit.egg-info
 venv
 mnist_model.pkl
 *.png
+fit_ml.egg-info

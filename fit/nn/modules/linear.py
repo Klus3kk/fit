@@ -1,7 +1,7 @@
 import numpy as np
 
+from nn.modules.base import Layer
 from core.tensor import Tensor
-from nn.layer import Layer
 
 
 class Linear(Layer):
