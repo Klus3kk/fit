@@ -19,7 +19,7 @@ from fit.nn.modules.linear import Linear
 from fit.nn.modules.container import Sequential
 from fit.nn.modules.normalization import BatchNorm
 from fit.loss.classification import CrossEntropyLoss
-from fit.optim.sgd import SGD
+from fit.optim.sgd import SGD, SGDMomentum
 from fit.optim.adam import Adam
 from fit.optim.experimental.sam import SAM
 from fit.data.dataset import Dataset
@@ -118,7 +118,6 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, epochs=20
         start_time = time.time()
 
         # Training phase
-        model.train()
         epoch_train_loss = 0.0
         train_batches = 0
 
@@ -187,8 +186,6 @@ def evaluate_model(model, data_loader, criterion):
     Returns:
         Tuple of (average_loss, accuracy)
     """
-    model.eval()
-
     total_loss = 0.0
     correct = 0
     total = 0
@@ -236,13 +233,14 @@ def compare_optimizers():
     # Loss function
     criterion = CrossEntropyLoss()
 
-    # Define optimizers to compare
+    # Define optimizers to compare - FIXED IMPORTS
     optimizers_config = [
-        ("SGD", lambda params: SGD(params, lr=0.01, momentum=0.9)),
+        ("SGD", lambda params: SGD(params, lr=0.01)),  # No momentum parameter for base SGD
+        ("SGD-Momentum", lambda params: SGDMomentum(params, lr=0.01, momentum=0.9)),  # Use SGDMomentum
         ("Adam", lambda params: Adam(params, lr=0.001)),
         (
             "SAM-SGD",
-            lambda params: SAM(params, SGD(params, lr=0.01, momentum=0.9), rho=0.05),
+            lambda params: SAM(params, SGDMomentum(params, lr=0.01, momentum=0.9), rho=0.05),
         ),
         ("SAM-Adam", lambda params: SAM(params, Adam(params, lr=0.001), rho=0.05)),
     ]
@@ -252,30 +250,38 @@ def compare_optimizers():
     for name, optimizer_fn in optimizers_config:
         print(f"\n{'='*20} Training with {name} {'='*20}")
 
-        # Create fresh model for each optimizer
-        model = create_model()
-        optimizer = optimizer_fn(model.parameters())
+        try:
+            # Create fresh model for each optimizer
+            model = create_model()
+            optimizer = optimizer_fn(model.parameters())
 
-        # Train model
-        history = train_model(
-            model, train_loader, val_loader, optimizer, criterion, epochs=10
-        )
+            # Train model
+            history = train_model(
+                model, train_loader, val_loader, optimizer, criterion, epochs=5  # Reduced epochs for demo
+            )
 
-        # Final test evaluation
-        test_loss, test_accuracy = evaluate_model(model, test_loader, criterion)
+            # Final test evaluation
+            test_loss, test_accuracy = evaluate_model(model, test_loader, criterion)
 
-        results[name] = {
-            "history": history,
-            "test_loss": test_loss,
-            "test_accuracy": test_accuracy,
-        }
+            results[name] = {
+                "history": history,
+                "test_loss": test_loss,
+                "test_accuracy": test_accuracy,
+            }
 
-        print(f"\nFinal {name} Results:")
-        print(f"Test Loss: {test_loss:.4f}")
-        print(f"Test Accuracy: {test_accuracy:.4f}")
+            print(f"\nFinal {name} Results:")
+            print(f"Test Loss: {test_loss:.4f}")
+            print(f"Test Accuracy: {test_accuracy:.4f}")
+
+        except Exception as e:
+            print(f"Error training with {name}: {e}")
+            continue
 
     # Plot comparison
-    plot_comparison(results)
+    if results:
+        plot_comparison(results)
+    else:
+        print("No successful training runs!")
 
     return results
 
@@ -381,30 +387,33 @@ if __name__ == "__main__":
             print("SUMMARY")
             print("=" * 50)
 
-            # Find best performing optimizer
-            best_optimizer = max(
-                results.keys(), key=lambda x: results[x]["test_accuracy"]
-            )
-            best_accuracy = results[best_optimizer]["test_accuracy"]
-
-            print(f"Best performing optimizer: {best_optimizer}")
-            print(f"Best test accuracy: {best_accuracy:.4f}")
-
-            # Show SAM vs non-SAM comparison
-            sam_optimizers = [name for name in results.keys() if "SAM" in name]
-            regular_optimizers = [name for name in results.keys() if "SAM" not in name]
-
-            if sam_optimizers and regular_optimizers:
-                avg_sam_acc = np.mean(
-                    [results[name]["test_accuracy"] for name in sam_optimizers]
+            if results:
+                # Find best performing optimizer
+                best_optimizer = max(
+                    results.keys(), key=lambda x: results[x]["test_accuracy"]
                 )
-                avg_regular_acc = np.mean(
-                    [results[name]["test_accuracy"] for name in regular_optimizers]
-                )
+                best_accuracy = results[best_optimizer]["test_accuracy"]
 
-                print(f"\nAverage SAM accuracy: {avg_sam_acc:.4f}")
-                print(f"Average regular accuracy: {avg_regular_acc:.4f}")
-                print(f"SAM improvement: {avg_sam_acc - avg_regular_acc:.4f}")
+                print(f"Best performing optimizer: {best_optimizer}")
+                print(f"Best test accuracy: {best_accuracy:.4f}")
+
+                # Show SAM vs non-SAM comparison
+                sam_optimizers = [name for name in results.keys() if "SAM" in name]
+                regular_optimizers = [name for name in results.keys() if "SAM" not in name]
+
+                if sam_optimizers and regular_optimizers:
+                    avg_sam_acc = np.mean(
+                        [results[name]["test_accuracy"] for name in sam_optimizers]
+                    )
+                    avg_regular_acc = np.mean(
+                        [results[name]["test_accuracy"] for name in regular_optimizers]
+                    )
+
+                    print(f"\nAverage SAM accuracy: {avg_sam_acc:.4f}")
+                    print(f"Average regular accuracy: {avg_regular_acc:.4f}")
+                    print(f"SAM improvement: {avg_sam_acc - avg_regular_acc:.4f}")
+            else:
+                print("No successful results to analyze.")
 
         except Exception as e:
             print(f"Error running comparison: {e}")

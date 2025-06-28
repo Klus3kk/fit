@@ -8,15 +8,14 @@ and providing accurate gradients for all optimizers.
 import matplotlib.pyplot as plt
 import numpy as np
 
-from fit.core import Tensor
-from fit.nn.modules import Tanh
-from fit.nn.modules import Linear
-from fit.nn.modules.base import Layer
-from fit.simple import Sequential
-from fit.loss import MSELoss
-from fit.optim import SGD, Adam, SGDMomentum
-from fit.optim.experimental import Lion
-from fit.optim.experimental import SAM
+from fit.core.tensor import Tensor
+from fit.nn.modules.activation import Tanh
+from fit.nn.modules.linear import Linear
+from fit.nn.modules.container import Sequential
+from fit.loss.regression import MSELoss
+from fit.optim.sgd import SGD, SGDMomentum
+from fit.optim.adam import Adam
+from fit.optim.experimental.sam import SAM
 
 
 def train_xor_with_optimizer(optimizer_name, epochs=2000, verbose=True):
@@ -35,8 +34,8 @@ def train_xor_with_optimizer(optimizer_name, epochs=2000, verbose=True):
     np.random.seed(42 + hash(optimizer_name) % 1000)
 
     # XOR dataset
-    X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
-    y = np.array([[0], [1], [1], [0]])
+    X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=np.float64)
+    y = np.array([[0], [1], [1], [0]], dtype=np.float64)
 
     # Convert to tensors
     X_tensor = Tensor(X, requires_grad=True)
@@ -52,14 +51,14 @@ def train_xor_with_optimizer(optimizer_name, epochs=2000, verbose=True):
 
     # Initialize with specific pattern for first layer
     init_scale = 1.0
-    first_weights = np.zeros((2, hidden_size))
+    first_weights = np.zeros((hidden_size, 2))  # Fixed: proper shape for weight matrix
     for i in range(hidden_size):
         if i % 2 == 0:
-            first_weights[0, i] = init_scale
-            first_weights[1, i] = -init_scale
+            first_weights[i, 0] = init_scale
+            first_weights[i, 1] = -init_scale
         else:
-            first_weights[0, i] = -init_scale
-            first_weights[1, i] = init_scale
+            first_weights[i, 0] = -init_scale
+            first_weights[i, 1] = init_scale
 
     # Alternating bias pattern
     first_bias = np.zeros(hidden_size)
@@ -73,67 +72,59 @@ def train_xor_with_optimizer(optimizer_name, epochs=2000, verbose=True):
     model.layers[0].weight.data = first_weights
     model.layers[0].bias.data = first_bias
 
-    # Initialize output layer with small random values
-    model.layers[2].weight.data = np.random.uniform(-0.1, 0.1, (hidden_size, 1))
-    model.layers[2].bias.data = np.zeros(1)
+    # Initialize second layer with smaller random weights
+    model.layers[2].weight.data = np.random.normal(0, 0.1, model.layers[2].weight.data.shape)
+    model.layers[2].bias.data = np.zeros_like(model.layers[2].bias.data)
 
-    # Create loss function
-    loss_fn = MSELoss()
-
-    # Create optimizer with appropriate learning rates for each optimizer
+    # Set up optimizer
     if optimizer_name == "SGD":
-        optimizer = SGD(model.parameters(), lr=0.05)
+        optimizer = SGD(model.parameters(), lr=0.1)
     elif optimizer_name == "SGDMomentum":
-        optimizer = SGDMomentum(model.parameters(), lr=0.02, momentum=0.9)
+        optimizer = SGDMomentum(model.parameters(), lr=0.1, momentum=0.9)
     elif optimizer_name == "Adam":
         optimizer = Adam(model.parameters(), lr=0.01)
-    elif optimizer_name == "Lion":
-        optimizer = Lion(model.parameters(), lr=0.003)
     elif optimizer_name == "SAM":
-        # SAM needs a base optimizer
-        base_optimizer = Adam(model.parameters(), lr=0.01)
+        base_optimizer = SGD(model.parameters(), lr=0.1, momentum=0.9)
         optimizer = SAM(model.parameters(), base_optimizer, rho=0.05)
     else:
         raise ValueError(f"Unknown optimizer: {optimizer_name}")
 
-    # Training loop
+    # Loss function
+    loss_fn = MSELoss()
+
+    # Track training progress
     losses = []
     accuracies = []
 
-    for epoch in range(1, epochs + 1):
-        # Forward pass
+    # Training loop
+    for epoch in range(epochs):
+        # Zero gradients
+        optimizer.zero_grad()
+
         if optimizer_name == "SAM":
-            # SAM requires a closure for both steps
-            def closure():
-                outputs = model(X_tensor)
-                loss = loss_fn(outputs, y_tensor)
-                loss.backward()
-                return loss
-
-            # First step (perturb weights)
-            loss = optimizer.first_step(closure)
-
-            # Second step (compute gradient at perturbed weights & update)
-            loss = optimizer.second_step(closure)
-
-            # Get outputs for accuracy calculation
+            # SAM requires two forward passes
             outputs = model(X_tensor)
+            loss = loss_fn(outputs, y_tensor)
+            loss.backward()
+            
+            # First step: perturb weights
+            optimizer.first_step(zero_grad=True)
+            
+            # Second forward pass
+            outputs = model(X_tensor)
+            loss = loss_fn(outputs, y_tensor)
+            loss.backward()
+            
+            # Second step: update weights
+            optimizer.second_step(zero_grad=True)
         else:
             # Standard optimization
             outputs = model(X_tensor)
             loss = loss_fn(outputs, y_tensor)
-            losses.append(float(loss.data))
-
-            # Backward pass
             loss.backward()
-
-            # Update parameters
             optimizer.step()
-            optimizer.zero_grad()
 
-        # Store loss for SAM
-        if optimizer_name == "SAM":
-            losses.append(float(loss.data))
+        losses.append(float(loss.data))
 
         # Calculate accuracy
         threshold = 0.5
@@ -142,45 +133,33 @@ def train_xor_with_optimizer(optimizer_name, epochs=2000, verbose=True):
         accuracy = np.mean(predictions == true_values) * 100
         accuracies.append(accuracy)
 
-        # Only print progress occasionally to avoid spamming
-        if verbose and (epoch % 200 == 0 or epoch == 1 or epoch == epochs):
-            print(
-                f"{optimizer_name} - Epoch {epoch}/{epochs}, Loss: {losses[-1]:.4f}, Accuracy: {accuracy:.1f}%"
-            )
+        # Print progress occasionally
+        if verbose and (epoch % 200 == 0 or epoch == 1 or epoch == epochs-1):
+            print(f"{optimizer_name} - Epoch {epoch}/{epochs}, Loss: {losses[-1]:.4f}, Accuracy: {accuracy:.1f}%")
 
-        # Early stopping if we've reached perfect accuracy
+        # Early stopping if converged
         if accuracy == 100.0 and losses[-1] < 0.01 and epoch > 100:
             if verbose:
-                print(
-                    f"{optimizer_name} - Converged at epoch {epoch}/{epochs}, Loss: {losses[-1]:.4f}"
-                )
+                print(f"{optimizer_name} - Converged at epoch {epoch}/{epochs}")
             break
 
-    # Final predictions and accuracy
+    # Final evaluation
     outputs = model(X_tensor)
     threshold = 0.5
     predicted_classes = (outputs.data >= threshold).astype(int)
     actual_classes = y.astype(int)
-    accuracy = np.mean(predicted_classes == actual_classes) * 100
+    final_accuracy = np.mean(predicted_classes == actual_classes) * 100
 
     if verbose:
-        print(f"\n{optimizer_name} final accuracy: {accuracy:.1f}%")
-        print("Predictions vs. Actual:")
-        for i in range(len(X)):
-            input_data = X[i]
-            actual = y[i][0]
-            prediction = outputs.data[i][0]
-            predicted_class = 1 if prediction >= 0.5 else 0
-            print(
-                f"Input: {input_data}, Predicted: {prediction:.4f} -> {predicted_class}, Actual: {actual}"
-            )
+        print(f"\n{optimizer_name} final results:")
+        print(f"  Final accuracy: {final_accuracy:.1f}%")
+        print(f"  Final loss: {losses[-1]:.4f}")
 
-    # Return results in a dictionary
     return {
         "model": model,
         "losses": losses,
         "accuracies": accuracies,
-        "final_accuracy": accuracy,
+        "final_accuracy": final_accuracy,
         "predictions": outputs.data.flatten(),
         "optimizer": optimizer_name,
     }
@@ -189,10 +168,6 @@ def train_xor_with_optimizer(optimizer_name, epochs=2000, verbose=True):
 def plot_decision_boundaries(results, optimizers):
     """
     Plot decision boundaries for each optimizer.
-
-    Args:
-        results: Dictionary of optimizer results
-        optimizers: List of optimizer names to plot
     """
     plt.figure(figsize=(15, 10))
 
@@ -221,7 +196,7 @@ def plot_decision_boundaries(results, optimizers):
         # Make predictions on the mesh grid
         Z = []
         for point in mesh_points:
-            x_point = Tensor(point.reshape(1, -1))
+            x_point = Tensor(point.reshape(1, -1), requires_grad=False)
             pred = model(x_point).data[0, 0]
             Z.append(1 if pred >= 0.5 else 0)
 
@@ -241,7 +216,7 @@ def plot_decision_boundaries(results, optimizers):
         plt.ylabel("X2")
 
     plt.tight_layout()
-    plt.savefig("optimizer_decision_boundaries.png")
+    plt.savefig("optimizer_decision_boundaries.png", dpi=150, bbox_inches="tight")
     print("\nDecision boundaries saved to optimizer_decision_boundaries.png")
 
 
@@ -249,60 +224,69 @@ def compare_optimizers():
     """
     Compare different optimizers on the XOR problem.
     """
-    # Set up plot
-    plt.figure(figsize=(12, 8))
+    print("Optimizer Comparison on XOR Problem")
+    print("=" * 40)
 
     # List of optimizers to compare
-    optimizers = ["SGD", "SGDMomentum", "Adam", "Lion", "SAM"]
+    optimizers = ["SGD", "SGDMomentum", "Adam", "SAM"]
     results = {}
 
     # Train with each optimizer
     for optimizer_name in optimizers:
         print(f"\nTraining with {optimizer_name}...")
-        result = train_xor_with_optimizer(optimizer_name, epochs=2000, verbose=True)
-        results[optimizer_name] = result
+        try:
+            result = train_xor_with_optimizer(optimizer_name, epochs=1000, verbose=True)
+            results[optimizer_name] = result
+        except Exception as e:
+            print(f"Error training with {optimizer_name}: {e}")
+            continue
 
-        # Plot loss curves
-        plt.subplot(2, 1, 1)
+    if not results:
+        print("No successful training runs!")
+        return
+
+    # Set up plot
+    plt.figure(figsize=(12, 8))
+
+    # Plot loss curves
+    plt.subplot(2, 1, 1)
+    for optimizer_name, result in results.items():
         plt.plot(result["losses"], label=f"{optimizer_name}")
 
-    # Format loss plot
-    plt.subplot(2, 1, 1)
     plt.title("Training Loss Comparison")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
-    plt.yscale("log")  # Log scale to better see differences
-    plt.ylim(1e-4, 2)  # Focus on relevant loss range
+    plt.yscale("log")
+    plt.ylim(1e-4, 2)
     plt.legend()
     plt.grid(True)
 
     # Plot accuracy comparison
     plt.subplot(2, 1, 2)
-    accuracies = [results[opt]["final_accuracy"] for opt in optimizers]
+    accuracies = [results[opt]["final_accuracy"] for opt in results.keys()]
+    optimizer_names = list(results.keys())
 
-    plt.bar(optimizers, accuracies)
+    plt.bar(optimizer_names, accuracies)
     plt.title("Final Accuracy Comparison")
     plt.xlabel("Optimizer")
     plt.ylabel("Accuracy (%)")
-    plt.ylim(0, 105)  # Max 100% with some margin
+    plt.ylim(0, 105)
 
     # Add accuracy values on top of bars
     for i, acc in enumerate(accuracies):
         plt.text(i, acc + 2, f"{acc:.1f}%", ha="center")
 
     plt.tight_layout()
-    plt.savefig("optimizer_comparison.png")
+    plt.savefig("optimizer_comparison.png", dpi=150, bbox_inches="tight")
     print("\nComparison plot saved to optimizer_comparison.png")
 
-    # Plot decision boundaries for each optimizer
-    plot_decision_boundaries(results, optimizers)
+    # Plot decision boundaries
+    plot_decision_boundaries(results, optimizer_names)
 
     # Print summary
     print("\nOptimizer Performance Summary:")
-    for opt in optimizers:
-        print(
-            f"- {opt}: {results[opt]['final_accuracy']:.1f}% accuracy, final loss = {results[opt]['losses'][-1]:.6f}"
-        )
+    for opt in optimizer_names:
+        print(f"- {opt}: {results[opt]['final_accuracy']:.1f}% accuracy, final loss = {results[opt]['losses'][-1]:.6f}")
 
 
 if __name__ == "__main__":

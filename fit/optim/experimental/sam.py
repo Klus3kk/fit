@@ -16,7 +16,7 @@ Paper: https://arxiv.org/abs/2010.01412
 import numpy as np
 from typing import List, Callable, Dict, Optional, Union, Tuple, Any
 
-from core.tensor import Tensor
+from fit.core.tensor import Tensor
 
 
 class SAM:
@@ -65,155 +65,143 @@ class SAM:
         self.grad_norm_history = []
         self.max_history_size = 10
 
-    def first_step(self, closure: Callable[[], Tensor]) -> Tensor:
+    def first_step(self, zero_grad: bool = False):
         """
         First step of SAM: Compute gradient at current position, perturb weights
         in the direction of steepest ascent, and save original weights.
 
         Args:
-            closure: A callable that computes the loss and its gradients
-
-        Returns:
-            Loss value at the current weights
+            zero_grad: Whether to zero gradients after computing perturbation
         """
-        # Evaluate loss and compute gradients
-        loss = closure()
-
-        # Save current parameter values and record which ones have gradients
-        with_grad_params = []
+        # Save current parameters
         for i, param in enumerate(self.parameters):
+            self.param_copies[i] = param.data.copy()
+
+        # Compute perturbation based on current gradients
+        gradients = [param.grad for param in self.parameters if param.grad is not None]
+        
+        if not gradients:
+            return  # No gradients to work with
+
+        # Calculate gradient norm
+        grad_norm = self._compute_grad_norm(gradients)
+
+        if grad_norm < self.epsilon:
+            return  # Gradients too small
+
+        # Apply perturbation
+        perturbation_scale = self.rho / (grad_norm + self.epsilon)
+
+        for param in self.parameters:
             if param.grad is not None:
-                with_grad_params.append((i, param))
-                self.param_copies[i] = param.data.copy()
+                if self.adaptive:
+                    # Adaptive SAM: scale by parameter magnitude
+                    param_norm = np.linalg.norm(param.data) + self.epsilon
+                    scale = perturbation_scale * param_norm
+                else:
+                    scale = perturbation_scale
 
-        # Skip if no parameters have gradients
-        if not with_grad_params:
-            return loss
+                # Apply perturbation
+                param.data += scale * param.grad
 
-        # Compute norm of the gradients
-        grad_norm = self._grad_norm(with_grad_params)
+        # Zero gradients if requested
+        if zero_grad:
+            self.zero_grad()
 
-        # Skip update if gradient norm is too small
-        if grad_norm < self.epsilon or np.isnan(grad_norm):
-            return loss
-
-        # Keep track of norm history for adaptive clipping
-        if self.auto_clip:
-            self.grad_norm_history.append(grad_norm)
-            if len(self.grad_norm_history) > self.max_history_size:
-                self.grad_norm_history.pop(0)
-
-        # Scale factor for the perturbation
-        scale = self.rho / (grad_norm + self.epsilon)
-
-        # Apply automatic gradient clipping if enabled
-        if self.auto_clip and len(self.grad_norm_history) > 1:
-            median_norm = np.median(self.grad_norm_history)
-            clip_threshold = 2.0 * median_norm
-            if grad_norm > clip_threshold:
-                scale = self.rho / (clip_threshold + self.epsilon)
-
-        # Add perturbation to the parameters
-        for idx, param in with_grad_params:
-            if self.adaptive:
-                # Adaptive SAM: scale perturbation by parameter norm
-                param_norm = np.linalg.norm(param.data)
-                adaptive_scale = (
-                    self.rho * param_norm / (np.linalg.norm(param.grad) + self.epsilon)
-                )
-                param.data = param.data + adaptive_scale * param.grad
-            else:
-                # Standard SAM: uniform perturbation scale
-                param.data = param.data + scale * param.grad
-
-        # Zero out gradients for the second step
-        self.zero_grad()
-
-        return loss
-
-    def second_step(self, closure: Callable[[], Tensor]) -> Tensor:
+    def second_step(self, zero_grad: bool = False):
         """
-        Second step of SAM: Compute gradients at the perturbed weights,
-        restore original weights, then perform standard optimizer update.
+        Second step of SAM: Restore original weights and apply the actual update.
 
         Args:
-            closure: A callable that computes the loss and its gradients
-
-        Returns:
-            Loss value at the perturbed weights
+            zero_grad: Whether to zero gradients after the update
         """
-        # Compute loss and gradients at the perturbed point
-        loss = closure()
-
-        # Restore original weights
+        # Restore original parameters
         for i, param in enumerate(self.parameters):
             if self.param_copies[i] is not None:
                 param.data = self.param_copies[i]
-                # Clear the copy to save memory
-                self.param_copies[i] = None
 
-        # Perform optimizer update with gradients from perturbed point
+        # Apply base optimizer step
         self.base_optimizer.step()
+
+        # Zero gradients if requested
+        if zero_grad:
+            self.zero_grad()
+
+    def step(self, closure: Optional[Callable] = None):
+        """
+        Single step that combines both SAM steps (for compatibility).
+        
+        Note: This requires the closure to compute the loss function.
+        For most use cases, use first_step() and second_step() separately.
+        """
+        if closure is None:
+            raise ValueError("SAM requires a closure function for single-step mode")
+
+        # First step: compute gradients and perturb
+        self.first_step(zero_grad=True)
+
+        # Re-compute gradients at perturbed position
+        loss = closure()
+        loss.backward()
+
+        # Second step: restore and update
+        self.second_step(zero_grad=True)
 
         return loss
 
-    def step(self, closure: Callable[[], Tensor]) -> Tensor:
-        """
-        Complete SAM update. This performs both steps of SAM in sequence.
+    def zero_grad(self):
+        """Zero all parameter gradients."""
+        for param in self.parameters:
+            param.grad = None
 
-        Args:
-            closure: A callable that computes the loss and its gradients
-
-        Returns:
-            Loss value from the second step
-        """
-        self.first_step(closure)
-        return self.second_step(closure)
-
-    def zero_grad(self) -> None:
-        """Zero out gradients of all parameters."""
-        self.base_optimizer.zero_grad()
-
-    def _grad_norm(self, with_grad_params: List[Tuple[int, Tensor]]) -> float:
-        """
-        Compute the norm of gradients.
-
-        Args:
-            with_grad_params: List of (index, parameter) tuples having gradients
-
-        Returns:
-            Norm of the gradients
-        """
-        # Compute the square sum of gradients
-        norm_sq = 0.0
-
-        for _, param in with_grad_params:
-            if param.grad is not None:
-                # Square and sum gradients
-                grad_sq = np.sum(np.square(param.grad))
-                norm_sq += grad_sq
-
-        return np.sqrt(norm_sq)
+    def _compute_grad_norm(self, gradients: List[np.ndarray]) -> float:
+        """Compute the norm of all gradients."""
+        total_norm = 0.0
+        for grad in gradients:
+            if grad is not None:
+                total_norm += np.sum(grad * grad)
+        return np.sqrt(total_norm)
 
     @property
-    def defaults(self) -> Dict[str, Any]:
-        """Get the default parameters of the optimizer."""
+    def lr(self):
+        """Get learning rate from base optimizer."""
+        return getattr(self.base_optimizer, "lr", None)
+
+    @lr.setter
+    def lr(self, value):
+        """Set learning rate on base optimizer."""
+        if hasattr(self.base_optimizer, "lr"):
+            self.base_optimizer.lr = value
+
+    def state_dict(self) -> Dict[str, Any]:
+        """Get optimizer state."""
         return {
             "rho": self.rho,
             "epsilon": self.epsilon,
             "adaptive": self.adaptive,
             "auto_clip": self.auto_clip,
+            "base_optimizer": getattr(self.base_optimizer, "state_dict", lambda: {})(),
         }
 
-    def __str__(self) -> str:
-        """String representation of the optimizer."""
-        return f"SAM(rho={self.rho}, adaptive={self.adaptive}, auto_clip={self.auto_clip}, base_optimizer={self.base_optimizer})"
+    def load_state_dict(self, state_dict: Dict[str, Any]):
+        """Load optimizer state."""
+        self.rho = state_dict.get("rho", self.rho)
+        self.epsilon = state_dict.get("epsilon", self.epsilon)
+        self.adaptive = state_dict.get("adaptive", self.adaptive)
+        self.auto_clip = state_dict.get("auto_clip", self.auto_clip)
 
-    @property
-    def lr(self) -> float:
-        """Get the current learning rate from the base optimizer."""
-        return (
-            self._base_lr
-            if self._base_lr is not None
-            else getattr(self.base_optimizer, "lr", 0.01)
-        )
+        if hasattr(self.base_optimizer, "load_state_dict"):
+            self.base_optimizer.load_state_dict(state_dict.get("base_optimizer", {}))
+
+
+class AdaptiveSAM(SAM):
+    """
+    Adaptive SAM that automatically adjusts the perturbation size.
+    
+    This variant adjusts the perturbation based on the parameter magnitudes,
+    often leading to better performance on diverse problems.
+    """
+
+    def __init__(self, parameters: List[Tensor], base_optimizer: Any, **kwargs):
+        kwargs["adaptive"] = True
+        super().__init__(parameters, base_optimizer, **kwargs)
