@@ -84,7 +84,8 @@ def train_xor_with_optimizer(optimizer_name, epochs=2000, verbose=True):
     elif optimizer_name == "Adam":
         optimizer = Adam(model.parameters(), lr=0.01)
     elif optimizer_name == "SAM":
-        base_optimizer = SGD(model.parameters(), lr=0.1, momentum=0.9)
+        # Use SGDMomentum as base optimizer for SAM, not SGD with momentum
+        base_optimizer = SGDMomentum(model.parameters(), lr=0.1, momentum=0.9)
         optimizer = SAM(model.parameters(), base_optimizer, rho=0.05)
     else:
         raise ValueError(f"Unknown optimizer: {optimizer_name}")
