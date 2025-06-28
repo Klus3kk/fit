@@ -311,3 +311,11 @@ class Tensor(Node):
         # Call backward functions in reverse topological order
         for node in reversed(topo):
             node._backward()
+            
+    @property
+    def T(self):
+        """Transpose property for 2D tensors."""
+        if len(self.data.shape) == 2:
+            return Tensor(self.data.T, requires_grad=self.requires_grad)
+        else:
+            raise ValueError("T property only works for 2D tensors")

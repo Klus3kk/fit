@@ -7,8 +7,6 @@ for efficient backpropagation.
 
 import numpy as np
 from typing import Dict, List, Set, Callable, Optional, Tuple, Any, Union
-from fit.core.tensor import Tensor
-
 
 class Node:
     """
@@ -164,8 +162,8 @@ class Function:
             tensor_inputs = [
                 inp for inp in inputs if isinstance(inp, Tensor) and inp.requires_grad
             ]
-            output.parents = set(tensor_inputs)
-
+            output._prev = set(tensor_inputs)
+            
             # Define backward function
             def backward_fn():
                 if output.grad is not None:
@@ -177,7 +175,7 @@ class Function:
                             else:
                                 inp.grad = inp.grad + grad
 
-            output.backward_fn = backward_fn
+            output._backward = backward_fn
 
         return output
 
@@ -352,21 +350,21 @@ class Mean(Function):
     """Mean reduction function."""
 
     @staticmethod
-    def apply(
-        ctx: Dict[str, Any],
-        a: np.ndarray,
-        axis: Optional[int] = None,
-        keepdims: bool = False,
-    ) -> np.ndarray:
+    def apply(ctx: Dict[str, Any], a: np.ndarray, axis=None, keepdims=False) -> np.ndarray:
         ctx["input_shape"] = a.shape
+        
+        # Convert 0-d array to None
+        if hasattr(axis, 'ndim') and axis.ndim == 0:
+            axis = None
+        
         ctx["axis"] = axis
         ctx["keepdims"] = keepdims
-
+        
         if axis is None:
             ctx["size"] = a.size
         else:
             ctx["size"] = a.shape[axis]
-
+            
         return np.mean(a, axis=axis, keepdims=keepdims)
 
     @staticmethod
