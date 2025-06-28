@@ -79,18 +79,19 @@ def train_and_evaluate_mnist():
 
     # Create model: 784 -> 128 -> 64 -> 10
     model = Sequential(
-        Linear(784, 128), ReLU(), Linear(128, 64), ReLU(), Linear(64, 10), Softmax()
+        Linear(784, 128), ReLU(),
+        Linear(128, 64), ReLU(),
+        Linear(64, 10) 
     )
-
-    print("Model architecture:")
-    print("784 (input) -> 128 -> ReLU -> 64 -> ReLU -> 10 -> Softmax (output)")
-
+    
     # Create dataset and dataloader
     train_dataset = Dataset(X_train_subset, y_train_subset)
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
 
     # Create loss function and optimizer
     criterion = CrossEntropyLoss()
+    
+    
     optimizer = Adam(model.parameters(), lr=0.001)
 
     print(f"\nStarting training with batch size 32...")

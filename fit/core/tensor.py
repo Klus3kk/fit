@@ -225,9 +225,26 @@ class Tensor(Node):
         Returns:
             A new tensor containing the mean value
         """
-        # Use the Mean function from autograd
-        mean_fn = get_function("mean")
-        return mean_fn.forward(self, axis, keepdims)
+        # Just do it directly with numpy, forget the autograd for now
+        result_data = np.mean(self.data, axis=axis, keepdims=keepdims)
+        result = Tensor(result_data, requires_grad=self.requires_grad)
+        
+        if self.requires_grad:
+            def _backward():
+                if result.grad is not None:
+                    # Gradient of mean is 1/n
+                    if axis is None:
+                        grad = np.full_like(self.data, result.grad / self.data.size)
+                    else:
+                        # Handle axis case
+                        grad = np.full_like(self.data, result.grad / self.data.shape[axis])
+                    
+                    self.grad = grad if self.grad is None else self.grad + grad
+            
+            result._backward = _backward
+            result._prev = {self}
+        
+        return result
 
     def exp(self):
         """

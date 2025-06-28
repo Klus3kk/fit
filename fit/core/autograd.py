@@ -353,8 +353,17 @@ class Mean(Function):
     def apply(ctx: Dict[str, Any], a: np.ndarray, axis=None, keepdims=False) -> np.ndarray:
         ctx["input_shape"] = a.shape
         
-        # Convert 0-d array to None
-        if hasattr(axis, 'ndim') and axis.ndim == 0:
+        # Handle problematic axis values
+        if isinstance(axis, np.ndarray):
+            if axis.ndim == 0:  # 0-d array
+                axis_val = axis.item()  # Extract the scalar value
+                if np.isnan(axis_val):
+                    axis = None
+                else:
+                    axis = int(axis_val)
+            else:
+                axis = None  # Multi-dimensional axis arrays not supported
+        elif axis is not None and np.isnan(axis):
             axis = None
         
         ctx["axis"] = axis
