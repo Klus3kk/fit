@@ -134,3 +134,84 @@ class BatchNorm(Layer):
             "eps": self.eps,
             "momentum": self.momentum,
         }
+
+
+class LayerNorm(Layer):
+    """
+    Layer Normalization: normalizes inputs across the feature dimension.
+    
+    Unlike BatchNorm, LayerNorm normalizes across features for each sample independently.
+    """
+
+    def __init__(self, normalized_shape, eps=1e-5):
+        """
+        Initialize layer normalization.
+
+        Args:
+            normalized_shape: Input shape from an expected input of size
+            eps: Small constant for numerical stability
+        """
+        super().__init__()
+        
+        if isinstance(normalized_shape, int):
+            normalized_shape = (normalized_shape,)
+        
+        self.normalized_shape = normalized_shape
+        self.eps = eps
+
+        # Learnable parameters
+        self.weight = Tensor(np.ones(normalized_shape), requires_grad=True)
+        self.bias = Tensor(np.zeros(normalized_shape), requires_grad=True)
+
+        # Add parameters to be tracked
+        self.add_parameter(self.weight)
+        self.add_parameter(self.bias)
+
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Apply layer normalization.
+
+        Args:
+            x: Input tensor
+
+        Returns:
+            Normalized tensor
+        """
+        # Calculate mean and variance across the feature dimensions
+        # For most cases, this is the last dimension(s)
+        axes_to_normalize = tuple(range(-len(self.normalized_shape), 0))
+        
+        mean = np.mean(x.data, axis=axes_to_normalize, keepdims=True)
+        var = np.var(x.data, axis=axes_to_normalize, keepdims=True)
+
+        # Normalize
+        normalized = (x.data - mean) / np.sqrt(var + self.eps)
+
+        # Scale and shift
+        output_data = self.weight.data * normalized + self.bias.data
+
+        # Create output tensor
+        output = Tensor(output_data, requires_grad=x.requires_grad)
+
+        # Define backward pass (simplified for now)
+        def _backward():
+            if output.grad is None or not x.requires_grad:
+                return
+            
+            # For simplicity, just pass through the gradient
+            # A full implementation would compute proper LayerNorm gradients
+            x.grad = output.grad if x.grad is None else x.grad + output.grad
+            
+            # Update weight and bias gradients
+            if self.weight.requires_grad:
+                weight_grad = np.sum(output.grad * normalized, axis=tuple(range(x.data.ndim - len(self.normalized_shape))))
+                self.weight.grad = weight_grad if self.weight.grad is None else self.weight.grad + weight_grad
+            
+            if self.bias.requires_grad:
+                bias_grad = np.sum(output.grad, axis=tuple(range(x.data.ndim - len(self.normalized_shape))))
+                self.bias.grad = bias_grad if self.bias.grad is None else self.bias.grad + bias_grad
+
+        output._backward = _backward
+        output._prev = {x, self.weight, self.bias}
+
+        return output
