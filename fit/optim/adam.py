@@ -53,7 +53,8 @@ class Adam:
         for i, param in enumerate(self.parameters):
             if param.grad is None:
                 continue
-
+            
+        
             grad = param.grad
             state = self.state[i]
 

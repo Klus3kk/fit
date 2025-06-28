@@ -120,65 +120,62 @@ class Function:
 
     @classmethod
     def forward(cls, *inputs: "Tensor") -> "Tensor":
-        """
-        Forward pass of the function.
-
-        Args:
-            *inputs: Input tensors
-
-        Returns:
-            Output tensor
-        """
         from fit.core.tensor import Tensor
-
+        
         # Determine if output requires gradients
         requires_grad = any(t.requires_grad for t in inputs if isinstance(t, Tensor))
-
+        
         # Create context for storing data needed in backward
         ctx: Dict[str, Any] = {}
-
+        
         # Convert tensor inputs to numpy arrays for computation
         numpy_inputs = []
+        tensor_inputs = []  # Keep track of actual tensor objects
+        
         for inp in inputs:
-            # Check if it's a Tensor by looking for the data attribute
             if hasattr(inp, "data") and hasattr(inp, "requires_grad"):
                 numpy_inputs.append(inp.data)
+                tensor_inputs.append(inp)  # Store the tensor object
+            elif inp is None:
+                numpy_inputs.append(None)
+                tensor_inputs.append(None)
             else:
-                # Convert non-ndarray inputs to ndarrays
                 if not isinstance(inp, np.ndarray):
-                    if hasattr(inp, "data"):  # Still a tensor somehow
-                        inp = inp.data
                     inp = np.array(inp, dtype=np.float64)
                 numpy_inputs.append(inp)
-
+                tensor_inputs.append(None)
+        
         # Apply the operation
         output_data = cls.apply(ctx, *numpy_inputs)
-
+        
         # Create output tensor
         output = Tensor(output_data, requires_grad=requires_grad)
-
+        
         if requires_grad:
             # Store references to input tensors with requires_grad=True
-            tensor_inputs = [
-                inp for inp in inputs if isinstance(inp, Tensor) and inp.requires_grad
-            ]
-            output._prev = set(tensor_inputs)
+            grad_tensors = [t for t in tensor_inputs if t is not None and t.requires_grad]
+            output._prev = set(grad_tensors)
             
             # Define backward function
             def backward_fn():
                 if output.grad is not None:
                     grads = cls.backward(ctx, output.grad)
-                    for i, (inp, grad) in enumerate(zip(tensor_inputs, grads)):
-                        if grad is not None and inp.requires_grad:
-                            if inp.grad is None:
-                                inp.grad = grad
-                            else:
-                                inp.grad = inp.grad + grad
-
+                    
+                    # Assign gradients to the correct tensors
+                    grad_idx = 0
+                    for i, inp in enumerate(tensor_inputs):
+                        if inp is not None and inp.requires_grad:
+                            grad = grads[grad_idx] if grad_idx < len(grads) else None
+                            if grad is not None:
+                                if inp.grad is None:
+                                    inp.grad = grad
+                                else:
+                                    inp.grad = inp.grad + grad
+                            grad_idx += 1
+            
             output._backward = backward_fn
-
+        
         return output
-
 
 # Helper function for handling broadcasting in gradients
 def _unbroadcast(grad: np.ndarray, shape: Tuple[int, ...]) -> np.ndarray:
