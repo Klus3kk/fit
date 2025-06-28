@@ -1,53 +1,59 @@
 """
-This module implements the Tensor class for automatic differentiation in the ML framework.
+Core tensor implementation with automatic differentiation support.
 """
 
 import numpy as np
-from typing import Any, Callable, List, Optional, Set, Tuple, Union
+from typing import Any, List, Optional, Set, Tuple, Union
 
-from fit.core.autograd import Node, get_function
+from fit.core.autograd import get_function
 
 
-class Tensor(Node):
+class Tensor:
     """
     Core tensor class with automatic differentiation capabilities.
 
-    Implements a computational graph with automatic gradient calculation
-    for building and training neural networks.
+    A tensor stores data and tracks operations for gradient computation.
     """
 
-    def __init__(self, data, requires_grad=False):
+    def __init__(self, data, requires_grad: bool = False):
         """
-        Initialize a new Tensor.
+        Initialize a tensor.
 
         Args:
-            data: Input data (numpy array or convertible to numpy array)
-            requires_grad: Whether the tensor requires gradient computation
+            data: The data array (numpy array or compatible)
+            requires_grad: Whether to track operations for gradient computation
         """
-        super().__init__(requires_grad=requires_grad)
-
-        # Handle Tensor input by extracting its data
+        # Handle various input types
         if isinstance(data, Tensor):
-            data = data.data
-
-        if not isinstance(data, np.ndarray):
-            data = np.array(data, dtype=np.float64)  # Use float64 for better precision
+            self.data = data.data.copy()
+        elif isinstance(data, (list, tuple)):
+            self.data = np.array(data, dtype=np.float64)
+        elif isinstance(data, (int, float)):
+            self.data = np.array(data, dtype=np.float64)
+        elif isinstance(data, np.integer):
+            self.data = np.array(data, dtype=np.float64)
+        elif isinstance(data, np.floating):
+            self.data = np.array(data, dtype=np.float64)
+        elif isinstance(data, np.ndarray):
+            self.data = data.astype(np.float64)
         else:
-            # Ensure data is float type for gradient calculations
-            if data.dtype.kind != "f":
-                data = data.astype(np.float64)
+            raise TypeError(f"Unsupported data type: {type(data)}")
 
-        self.data = data
-        self._prev = set()  # Dependencies for backward pass
-        self._backward = lambda: None  # Default backward function
+        self.requires_grad = requires_grad
+        self.grad = None
 
-    def __repr__(self):
-        """Return string representation of the tensor."""
-        return f"Tensor(data={self.data}, requires_grad={self.requires_grad}, grad={self.grad})"
+        # Backward pass variables
+        self._backward = lambda: None  # Default: do nothing
+        self._prev: Set["Tensor"] = set()  # Set of tensors that led to this one
+
+    def __repr__(self) -> str:
+        """String representation of the tensor."""
+        grad_str = ", requires_grad=True" if self.requires_grad else ""
+        return f"Tensor({self.data}{grad_str})"
 
     def __add__(self, other):
         """
-        Add two tensors or a tensor and a scalar.
+        Add a tensor or scalar to this tensor.
 
         Args:
             other: Another tensor or scalar value
@@ -56,7 +62,8 @@ class Tensor(Node):
             A new tensor containing the result
         """
         # Convert scalar to tensor if needed
-        other = other if isinstance(other, Tensor) else Tensor(other)
+        if not isinstance(other, Tensor):
+            other = Tensor(other)
 
         # Use the Add function from autograd
         add_fn = get_function("add")
@@ -68,7 +75,7 @@ class Tensor(Node):
 
     def __mul__(self, other):
         """
-        Multiply two tensors or a tensor and a scalar.
+        Multiply tensor by another tensor or scalar.
 
         Args:
             other: Another tensor or scalar value
@@ -81,9 +88,8 @@ class Tensor(Node):
             other = Tensor(other)
 
         # Use the Multiply function from autograd
-        from fit.core.autograd import Multiply
-
-        return Multiply.forward(self, other)
+        multiply_fn = get_function("multiply")
+        return multiply_fn.forward(self, other)
 
     def __rmul__(self, other):
         """Handle right multiplication (scalar * tensor)."""
@@ -331,8 +337,63 @@ class Tensor(Node):
             
     @property
     def T(self):
-        """Transpose property for 2D tensors."""
-        if len(self.data.shape) == 2:
-            return Tensor(self.data.T, requires_grad=self.requires_grad)
-        else:
+        """Transpose property for 2D tensors with proper gradient support."""
+        if len(self.data.shape) != 2:
             raise ValueError("T property only works for 2D tensors")
+        
+        # Create transposed tensor
+        out = Tensor(self.data.T, requires_grad=self.requires_grad)
+        
+        if self.requires_grad:
+            def _backward():
+                if out.grad is not None:
+                    # print(f"Transpose backward: out.grad.shape = {out.grad.shape}, original.shape = {self.data.shape}")
+
+                    grad = out.grad.T  # Transpose the gradient back to original shape
+                    
+                    # print(f"  transposed grad.shape = {grad.shape}")
+                    self.grad = grad if self.grad is None else self.grad + grad
+            
+            out._backward = _backward
+            out._prev = {self}
+        
+        return out
+
+    def max(self, axis=None, keepdims=False):
+        """
+        Find maximum value along specified axis.
+
+        Args:
+            axis: Axis along which to find maximum
+            keepdims: Whether to keep reduced dimensions
+
+        Returns:
+            A new tensor containing the maximum value
+        """
+        result_data = np.max(self.data, axis=axis, keepdims=keepdims)
+        result = Tensor(result_data, requires_grad=self.requires_grad)
+
+        if self.requires_grad:
+            # Store which elements are max for gradient computation
+            if axis is None:
+                # Global maximum
+                max_mask = (self.data == np.max(self.data)).astype(np.float64)
+            else:
+                # Maximum along axis
+                max_vals = np.max(self.data, axis=axis, keepdims=True)
+                max_mask = (self.data == max_vals).astype(np.float64)
+
+            def _backward():
+                if result.grad is not None:
+                    # Only the maximum elements get the gradient
+                    grad = max_mask * result.grad
+                    if axis is not None and not keepdims:
+                        # Restore original shape if axis was reduced
+                        grad = np.expand_dims(grad, axis=axis)
+                    
+                    self.grad = grad if self.grad is None else self.grad + grad
+
+            result._backward = _backward
+            result._prev = {self}
+
+        return result

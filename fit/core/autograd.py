@@ -161,17 +161,29 @@ class Function:
                 if output.grad is not None:
                     grads = cls.backward(ctx, output.grad)
                     
+                    # Debug print for MatMul
+                    # if cls.__name__ == "MatMul":
+                    #     print(f"MatMul backward: output.grad.shape = {output.grad.shape}")
+                    #     for i, grad in enumerate(grads):
+                    #         if grad is not None:
+                    #             print(f"  grad[{i}].shape = {grad.shape}")
+                    #     print(f"  Assigning gradients to {len([inp for inp in tensor_inputs if inp is not None and inp.requires_grad])} tensors")
+                    #     for i, inp in enumerate(tensor_inputs):
+                    #         if inp is not None and inp.requires_grad:
+                    #             print(f"    tensor[{i}].shape = {inp.data.shape}")
+                    
                     # Assign gradients to the correct tensors
-                    grad_idx = 0
+                    # We need to match gradients with their corresponding input tensors
                     for i, inp in enumerate(tensor_inputs):
-                        if inp is not None and inp.requires_grad:
-                            grad = grads[grad_idx] if grad_idx < len(grads) else None
+                        if inp is not None and inp.requires_grad and i < len(grads):
+                            grad = grads[i]
                             if grad is not None:
+                                # if cls.__name__ == "MatMul":
+                                #     print(f"    Assigning grad[{i}] (shape {grad.shape}) to tensor[{i}] (shape {inp.data.shape})")
                                 if inp.grad is None:
                                     inp.grad = grad
                                 else:
                                     inp.grad = inp.grad + grad
-                            grad_idx += 1
             
             output._backward = backward_fn
         
@@ -277,6 +289,8 @@ class MatMul(Function):
     def apply(ctx: Dict[str, Any], a: np.ndarray, b: np.ndarray) -> np.ndarray:
         ctx["a"] = a
         ctx["b"] = b
+        ctx["a_shape"] = a.shape
+        ctx["b_shape"] = b.shape
         return a @ b
 
     @staticmethod
@@ -284,25 +298,18 @@ class MatMul(Function):
         ctx: Dict[str, Any], grad_output: np.ndarray
     ) -> Tuple[np.ndarray, np.ndarray]:
         a, b = ctx["a"], ctx["b"]
+        a_shape, b_shape = ctx["a_shape"], ctx["b_shape"]
 
-        # Gradient for a: grad_output @ b.T
-        # Handle different dimensions correctly
-        if grad_output.ndim == 1 and b.ndim == 2:
-            # Vector @ matrix case
-            grad_a = grad_output.reshape(1, -1) @ b.T
-            if a.ndim == 1:
-                grad_a = grad_a.reshape(-1)
-        else:
-            grad_a = grad_output @ b.T
-
-        # Gradient for b: a.T @ grad_output
-        # Handle different dimensions correctly
-        if a.ndim == 1 and grad_output.ndim > 0:
-            # Vector @ matrix case
-            a_reshaped = a.reshape(-1, 1)
-            grad_b = a_reshaped @ grad_output.reshape(1, -1)
-        else:
-            grad_b = a.T @ grad_output
+        # For matrix multiplication C = A @ B:
+        # dA = grad_output @ B.T
+        # dB = A.T @ grad_output
+        
+        grad_a = grad_output @ b.T
+        grad_b = a.T @ grad_output
+        
+        # Ensure gradients have the correct shapes
+        assert grad_a.shape == a_shape, f"grad_a shape {grad_a.shape} != a_shape {a_shape}"
+        assert grad_b.shape == b_shape, f"grad_b shape {grad_b.shape} != b_shape {b_shape}"
 
         return grad_a, grad_b
 
@@ -345,7 +352,7 @@ class Sum(Function):
 
 class Mean(Function):
     """Mean reduction function."""
-
+    
     @staticmethod
     def apply(ctx: Dict[str, Any], a: np.ndarray, axis=None, keepdims=False) -> np.ndarray:
         ctx["input_shape"] = a.shape
@@ -434,23 +441,23 @@ class Reshape(Function):
     @staticmethod
     def apply(ctx: Dict[str, Any], a: np.ndarray, shape: Tuple[int, ...]) -> np.ndarray:
         ctx["input_shape"] = a.shape
-        return np.reshape(a, shape)
+        return a.reshape(shape)
 
     @staticmethod
     def backward(
         ctx: Dict[str, Any], grad_output: np.ndarray
     ) -> Tuple[np.ndarray, None]:
         input_shape = ctx["input_shape"]
-        return np.reshape(grad_output, input_shape), None
+        return grad_output.reshape(input_shape), None
 
 
 class ReLU(Function):
-    """Rectified Linear Unit function."""
+    """Rectified Linear Unit activation function."""
 
     @staticmethod
     def apply(ctx: Dict[str, Any], a: np.ndarray) -> np.ndarray:
         ctx["mask"] = a > 0
-        return np.maximum(a, 0)
+        return np.maximum(0, a)
 
     @staticmethod
     def backward(ctx: Dict[str, Any], grad_output: np.ndarray) -> Tuple[np.ndarray,]:
@@ -458,49 +465,44 @@ class ReLU(Function):
         return (grad_output * mask,)
 
 
-class Tanh(Function):
-    """Hyperbolic tangent function."""
-
-    @staticmethod
-    def apply(ctx: Dict[str, Any], a: np.ndarray) -> np.ndarray:
-        result = np.tanh(a)
-        ctx["result"] = result
-        return result
-
-    @staticmethod
-    def backward(ctx: Dict[str, Any], grad_output: np.ndarray) -> Tuple[np.ndarray,]:
-        result = ctx["result"]
-        # Derivative of tanh is 1 - tanh^2
-        return (grad_output * (1 - result * result),)
-
-
-# Register functions for use with the tensor class
-function_registry = {
+# Function registry for dynamic lookup
+_function_registry = {
     "add": Add,
     "multiply": Multiply,
     "matmul": MatMul,
     "sum": Sum,
+    "mean": Mean,
     "exp": Exp,
     "log": Log,
     "reshape": Reshape,
     "relu": ReLU,
-    "mean": Mean,
-    "tanh": Tanh,
 }
 
 
-# Function to get a registered function
 def get_function(name: str) -> Function:
     """
-    Get a registered autograd function by name.
+    Get a function by name from the registry.
 
     Args:
         name: Name of the function
 
     Returns:
         Function class
-    """
-    if name not in function_registry:
-        raise ValueError(f"Function {name} not found in registry")
 
-    return function_registry[name]
+    Raises:
+        ValueError: If the function is not found
+    """
+    if name not in _function_registry:
+        raise ValueError(f"Function '{name}' not found in registry")
+    return _function_registry[name]
+
+
+def register_function(name: str, function: Function) -> None:
+    """
+    Register a new function in the registry.
+
+    Args:
+        name: Name of the function
+        function: Function class to register
+    """
+    _function_registry[name] = function

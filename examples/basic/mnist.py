@@ -86,7 +86,7 @@ def train_and_evaluate_mnist():
     print(f"\nStarting training with batch size 32...")
     
     # Training loop
-    epochs = 25
+    epochs = 10
     train_losses = []
     
     for epoch in range(epochs):
@@ -107,12 +107,12 @@ def train_and_evaluate_mnist():
             # 3. Backward pass
             loss.backward()
         
-            print("After backward:")
-            for i, param in enumerate(model.parameters()):
-                if param.grad is not None:
-                    print(f"  Param {i}: HAS gradient, shape {param.grad.shape}")
-                else:
-                    print(f"  Param {i}: NO gradient! (shape {param.data.shape})")
+            # print("After backward:")
+            # for i, param in enumerate(model.parameters()):
+            #     if param.grad is not None:
+            #         print(f"  Param {i}: HAS gradient, shape {param.grad.shape}")
+            #     else:
+            #         print(f"  Param {i}: NO gradient! (shape {param.data.shape})")
             # 4. Update parameters
             optimizer.step()
             
@@ -189,7 +189,6 @@ def evaluate_model(model, X_test, y_test):
 
 def main():
     """Main function."""
-    print("MNIST Classification Example")
     print("=" * 40)
     
     print("Training new model...")
