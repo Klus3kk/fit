@@ -9,8 +9,8 @@ import numpy as np
 from typing import Tuple, Optional, Dict, Any, Literal
 import os
 
-from data.dataset import Dataset
-from data.dataloader import DataLoader
+from fit.data.dataset import Dataset
+from fit.data.dataloader import DataLoader
 
 
 def load_dataset(

@@ -175,7 +175,7 @@ class Layer(ABC):
 
     def cuda(self):
         """Move layer to CUDA (placeholder - not implemented)."""
-        print("CUDA support not implemented in FIT framework")
+        print("CUDA support not implemented YET in FIT framework")
         return self
 
     def cpu(self):
@@ -187,6 +187,17 @@ class Layer(ABC):
         if device != "cpu":
             print(f"Device '{device}' not supported in FIT framework")
         return self
+
+    def add_child(self, module: "Layer"):
+        """
+        Add a child module to this layer.
+
+        Args:
+            module: Child module to add
+        """
+        # Generate a unique name for the module
+        name = f"child_{len(self._modules)}"
+        self._modules[name] = module
 
 
 class Module(Layer):

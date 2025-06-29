@@ -21,7 +21,8 @@ from fit.nn.modules.base import Layer
 from fit.nn.modules.linear import Linear
 from fit.nn.modules.activation import ReLU, GELU, Dropout
 from fit.nn.modules.normalization import LayerNorm
-from fit.attention_core import (
+
+from fit.nn.modules.attention import (
     MultiHeadAttention,
     SelfAttention,
     CrossAttention,

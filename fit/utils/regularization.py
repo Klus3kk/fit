@@ -1,6 +1,4 @@
-import numpy as np
-
-from core.tensor import Tensor
+from fit.core.tensor import Tensor
 
 
 def apply_l2_regularization(model, loss, lambda_reg=1e-5):

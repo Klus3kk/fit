@@ -79,7 +79,7 @@ class SAM:
 
         # Compute perturbation based on current gradients
         gradients = [param.grad for param in self.parameters if param.grad is not None]
-        
+
         if not gradients:
             return  # No gradients to work with
 
@@ -130,7 +130,7 @@ class SAM:
     def step(self, closure: Optional[Callable] = None):
         """
         Single step that combines both SAM steps (for compatibility).
-        
+
         Note: This requires the closure to compute the loss function.
         For most use cases, use first_step() and second_step() separately.
         """
@@ -197,7 +197,7 @@ class SAM:
 class AdaptiveSAM(SAM):
     """
     Adaptive SAM that automatically adjusts the perturbation size.
-    
+
     This variant adjusts the perturbation based on the parameter magnitudes,
     often leading to better performance on diverse problems.
     """

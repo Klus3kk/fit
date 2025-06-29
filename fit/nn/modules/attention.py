@@ -13,10 +13,10 @@ import numpy as np
 from typing import Optional, Tuple, Union
 import math
 
-from core.tensor import Tensor
-from nn.modules.base import Layer
-from nn.modules.linear import Linear
-from nn.modules.activation import Softmax, Dropout
+from fit.core.tensor import Tensor
+from fit.nn.modules.base import Layer
+from fit.nn.modules.linear import Linear
+from fit.nn.modules.activation import Softmax, Dropout
 
 
 class ScaledDotProductAttention(Layer):

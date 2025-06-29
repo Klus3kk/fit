@@ -73,7 +73,9 @@ def train_xor_with_optimizer(optimizer_name, epochs=2000, verbose=True):
     model.layers[0].bias.data = first_bias
 
     # Initialize second layer with smaller random weights
-    model.layers[2].weight.data = np.random.normal(0, 0.1, model.layers[2].weight.data.shape)
+    model.layers[2].weight.data = np.random.normal(
+        0, 0.1, model.layers[2].weight.data.shape
+    )
     model.layers[2].bias.data = np.zeros_like(model.layers[2].bias.data)
 
     # Set up optimizer
@@ -107,15 +109,15 @@ def train_xor_with_optimizer(optimizer_name, epochs=2000, verbose=True):
             outputs = model(X_tensor)
             loss = loss_fn(outputs, y_tensor)
             loss.backward()
-            
+
             # First step: perturb weights
             optimizer.first_step(zero_grad=True)
-            
+
             # Second forward pass
             outputs = model(X_tensor)
             loss = loss_fn(outputs, y_tensor)
             loss.backward()
-            
+
             # Second step: update weights
             optimizer.second_step(zero_grad=True)
         else:
@@ -135,8 +137,10 @@ def train_xor_with_optimizer(optimizer_name, epochs=2000, verbose=True):
         accuracies.append(accuracy)
 
         # Print progress occasionally
-        if verbose and (epoch % 200 == 0 or epoch == 1 or epoch == epochs-1):
-            print(f"{optimizer_name} - Epoch {epoch}/{epochs}, Loss: {losses[-1]:.4f}, Accuracy: {accuracy:.1f}%")
+        if verbose and (epoch % 200 == 0 or epoch == 1 or epoch == epochs - 1):
+            print(
+                f"{optimizer_name} - Epoch {epoch}/{epochs}, Loss: {losses[-1]:.4f}, Accuracy: {accuracy:.1f}%"
+            )
 
         # Early stopping if converged
         if accuracy == 100.0 and losses[-1] < 0.01 and epoch > 100:
@@ -287,7 +291,9 @@ def compare_optimizers():
     # Print summary
     print("\nOptimizer Performance Summary:")
     for opt in optimizer_names:
-        print(f"- {opt}: {results[opt]['final_accuracy']:.1f}% accuracy, final loss = {results[opt]['losses'][-1]:.6f}")
+        print(
+            f"- {opt}: {results[opt]['final_accuracy']:.1f}% accuracy, final loss = {results[opt]['losses'][-1]:.6f}"
+        )
 
 
 if __name__ == "__main__":

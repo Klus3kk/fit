@@ -6,9 +6,9 @@ import time
 
 import numpy as np
 
-import utils.regularization as reg
-from core.tensor import Tensor
-from monitor.tracker import TrainingTracker
+import fit.utils.regularization as reg
+from fit.core.tensor import Tensor
+from fit.monitor.tracker import TrainingTracker
 
 
 class Trainer:

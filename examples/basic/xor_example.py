@@ -34,10 +34,7 @@ def solve_xor():
     # Create network: 2 -> 8 -> 1 with proper activations
     # Using Sigmoid output so outputs are in [0,1] range like targets
     model = Sequential(
-        Linear(2, 8),
-        Tanh(),
-        Linear(8, 1),
-        Sigmoid()  # Output in [0,1] range
+        Linear(2, 8), Tanh(), Linear(8, 1), Sigmoid()  # Output in [0,1] range
     )
 
     # Initialize weights to break symmetry
@@ -45,7 +42,7 @@ def solve_xor():
     init_scale = 2.0
     with_grad = model.layers[0].weight.requires_grad
     model.layers[0].weight.requires_grad = False
-    
+
     # Set alternating pattern in first layer
     for i in range(8):
         if i % 2 == 0:
@@ -54,19 +51,19 @@ def solve_xor():
         else:
             model.layers[0].weight.data[i, 0] = -init_scale
             model.layers[0].weight.data[i, 1] = init_scale
-    
+
     # Set alternating bias
     for i in range(8):
         if i < 4:
             model.layers[0].bias.data[i] = 0.5
         else:
             model.layers[0].bias.data[i] = -0.5
-    
+
     model.layers[0].weight.requires_grad = with_grad
 
     # Use proper MSE loss function
     loss_fn = MSELoss()
-    
+
     # Create optimizer with higher learning rate for XOR
     optimizer = Adam(model.parameters(), lr=0.01)
 
@@ -102,7 +99,7 @@ def solve_xor():
     # Test the trained model
     print("\nTesting trained model:")
     print("Input -> Output (Target)")
-    
+
     test_output = model(X_tensor)
     for i in range(len(X)):
         predicted = test_output.data[i][0]
@@ -135,11 +132,11 @@ def solve_xor():
         plt.xlabel("Epoch")
         plt.ylabel("Loss")
         plt.grid(True)
-        plt.yscale('log')  # Log scale to see convergence better
+        plt.yscale("log")  # Log scale to see convergence better
 
         # Plot decision boundary
         plt.subplot(1, 2, 2)
-        
+
         # Create a grid to visualize the decision boundary
         xx, yy = np.meshgrid(np.linspace(-0.5, 1.5, 100), np.linspace(-0.5, 1.5, 100))
         grid_points = np.c_[xx.ravel(), yy.ravel()]
@@ -156,8 +153,12 @@ def solve_xor():
         colors = ["red", "blue"]
         for i in range(len(X)):
             plt.scatter(
-                X[i][0], X[i][1], c=colors[int(y[i][0])], s=200, 
-                edgecolors="black", linewidth=2
+                X[i][0],
+                X[i][1],
+                c=colors[int(y[i][0])],
+                s=200,
+                edgecolors="black",
+                linewidth=2,
             )
 
         plt.title("XOR Decision Boundary")

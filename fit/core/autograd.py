@@ -8,6 +8,7 @@ for efficient backpropagation.
 import numpy as np
 from typing import Dict, List, Set, Callable, Optional, Tuple, Any, Union
 
+
 class Node:
     """
     Represents a node in the computational graph.
@@ -121,17 +122,17 @@ class Function:
     @classmethod
     def forward(cls, *inputs: "Tensor") -> "Tensor":
         from fit.core.tensor import Tensor
-        
+
         # Determine if output requires gradients
         requires_grad = any(t.requires_grad for t in inputs if isinstance(t, Tensor))
-        
+
         # Create context for storing data needed in backward
         ctx: Dict[str, Any] = {}
-        
+
         # Convert tensor inputs to numpy arrays for computation
         numpy_inputs = []
         tensor_inputs = []  # Keep track of actual tensor objects
-        
+
         for inp in inputs:
             if hasattr(inp, "data") and hasattr(inp, "requires_grad"):
                 numpy_inputs.append(inp.data)
@@ -144,23 +145,25 @@ class Function:
                     inp = np.array(inp, dtype=np.float64)
                 numpy_inputs.append(inp)
                 tensor_inputs.append(None)
-        
+
         # Apply the operation
         output_data = cls.apply(ctx, *numpy_inputs)
-        
+
         # Create output tensor
         output = Tensor(output_data, requires_grad=requires_grad)
-        
+
         if requires_grad:
             # Store references to input tensors with requires_grad=True
-            grad_tensors = [t for t in tensor_inputs if t is not None and t.requires_grad]
+            grad_tensors = [
+                t for t in tensor_inputs if t is not None and t.requires_grad
+            ]
             output._prev = set(grad_tensors)
-            
+
             # Define backward function
             def backward_fn():
                 if output.grad is not None:
                     grads = cls.backward(ctx, output.grad)
-                    
+
                     # Debug print for MatMul
                     # if cls.__name__ == "MatMul":
                     #     print(f"MatMul backward: output.grad.shape = {output.grad.shape}")
@@ -171,7 +174,7 @@ class Function:
                     #     for i, inp in enumerate(tensor_inputs):
                     #         if inp is not None and inp.requires_grad:
                     #             print(f"    tensor[{i}].shape = {inp.data.shape}")
-                    
+
                     # Assign gradients to the correct tensors
                     # We need to match gradients with their corresponding input tensors
                     for i, inp in enumerate(tensor_inputs):
@@ -184,10 +187,11 @@ class Function:
                                     inp.grad = grad
                                 else:
                                     inp.grad = inp.grad + grad
-            
+
             output._backward = backward_fn
-        
+
         return output
+
 
 # Helper function for handling broadcasting in gradients
 def _unbroadcast(grad: np.ndarray, shape: Tuple[int, ...]) -> np.ndarray:
@@ -303,13 +307,17 @@ class MatMul(Function):
         # For matrix multiplication C = A @ B:
         # dA = grad_output @ B.T
         # dB = A.T @ grad_output
-        
+
         grad_a = grad_output @ b.T
         grad_b = a.T @ grad_output
-        
+
         # Ensure gradients have the correct shapes
-        assert grad_a.shape == a_shape, f"grad_a shape {grad_a.shape} != a_shape {a_shape}"
-        assert grad_b.shape == b_shape, f"grad_b shape {grad_b.shape} != b_shape {b_shape}"
+        assert (
+            grad_a.shape == a_shape
+        ), f"grad_a shape {grad_a.shape} != a_shape {a_shape}"
+        assert (
+            grad_b.shape == b_shape
+        ), f"grad_b shape {grad_b.shape} != b_shape {b_shape}"
 
         return grad_a, grad_b
 
@@ -352,11 +360,13 @@ class Sum(Function):
 
 class Mean(Function):
     """Mean reduction function."""
-    
+
     @staticmethod
-    def apply(ctx: Dict[str, Any], a: np.ndarray, axis=None, keepdims=False) -> np.ndarray:
+    def apply(
+        ctx: Dict[str, Any], a: np.ndarray, axis=None, keepdims=False
+    ) -> np.ndarray:
         ctx["input_shape"] = a.shape
-        
+
         # Handle problematic axis values
         if isinstance(axis, np.ndarray):
             if axis.ndim == 0:  # 0-d array
@@ -369,15 +379,15 @@ class Mean(Function):
                 axis = None  # Multi-dimensional axis arrays not supported
         elif axis is not None and np.isnan(axis):
             axis = None
-        
+
         ctx["axis"] = axis
         ctx["keepdims"] = keepdims
-        
+
         if axis is None:
             ctx["size"] = a.size
         else:
             ctx["size"] = a.shape[axis]
-            
+
         return np.mean(a, axis=axis, keepdims=keepdims)
 
     @staticmethod

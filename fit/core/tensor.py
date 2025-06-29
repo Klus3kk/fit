@@ -57,9 +57,13 @@ class Tensor:
         if not isinstance(other, Tensor):
             other = Tensor(other)
 
-        out = Tensor(self.data + other.data, requires_grad=self.requires_grad or other.requires_grad)
+        out = Tensor(
+            self.data + other.data,
+            requires_grad=self.requires_grad or other.requires_grad,
+        )
 
         if out.requires_grad:
+
             def _backward():
                 if self.requires_grad:
                     # Handle broadcasting for self
@@ -69,11 +73,15 @@ class Tensor:
                     for i in range(ndims_added):
                         grad_self = grad_self.sum(axis=0)
                     # Sum over broadcasted dims
-                    for i, (dim, grad_dim) in enumerate(zip(self.data.shape, grad_self.shape)):
+                    for i, (dim, grad_dim) in enumerate(
+                        zip(self.data.shape, grad_self.shape)
+                    ):
                         if dim == 1 and grad_dim > 1:
                             grad_self = grad_self.sum(axis=i, keepdims=True)
-                    
-                    self.grad = grad_self if self.grad is None else self.grad + grad_self
+
+                    self.grad = (
+                        grad_self if self.grad is None else self.grad + grad_self
+                    )
 
                 if other.requires_grad:
                     # Handle broadcasting for other
@@ -83,11 +91,15 @@ class Tensor:
                     for i in range(ndims_added):
                         grad_other = grad_other.sum(axis=0)
                     # Sum over broadcasted dims
-                    for i, (dim, grad_dim) in enumerate(zip(other.data.shape, grad_other.shape)):
+                    for i, (dim, grad_dim) in enumerate(
+                        zip(other.data.shape, grad_other.shape)
+                    ):
                         if dim == 1 and grad_dim > 1:
                             grad_other = grad_other.sum(axis=i, keepdims=True)
-                    
-                    other.grad = grad_other if other.grad is None else other.grad + grad_other
+
+                    other.grad = (
+                        grad_other if other.grad is None else other.grad + grad_other
+                    )
 
             out._backward = _backward
             out._prev = {self, other}
@@ -104,9 +116,13 @@ class Tensor:
         if not isinstance(other, Tensor):
             other = Tensor(other)
 
-        out = Tensor(self.data * other.data, requires_grad=self.requires_grad or other.requires_grad)
+        out = Tensor(
+            self.data * other.data,
+            requires_grad=self.requires_grad or other.requires_grad,
+        )
 
         if out.requires_grad:
+
             def _backward():
                 if self.requires_grad:
                     # Gradient w.r.t. self is other * grad_output
@@ -115,11 +131,15 @@ class Tensor:
                     ndims_added = grad_self.ndim - self.data.ndim
                     for i in range(ndims_added):
                         grad_self = grad_self.sum(axis=0)
-                    for i, (dim, grad_dim) in enumerate(zip(self.data.shape, grad_self.shape)):
+                    for i, (dim, grad_dim) in enumerate(
+                        zip(self.data.shape, grad_self.shape)
+                    ):
                         if dim == 1 and grad_dim > 1:
                             grad_self = grad_self.sum(axis=i, keepdims=True)
-                    
-                    self.grad = grad_self if self.grad is None else self.grad + grad_self
+
+                    self.grad = (
+                        grad_self if self.grad is None else self.grad + grad_self
+                    )
 
                 if other.requires_grad:
                     # Gradient w.r.t. other is self * grad_output
@@ -128,11 +148,15 @@ class Tensor:
                     ndims_added = grad_other.ndim - other.data.ndim
                     for i in range(ndims_added):
                         grad_other = grad_other.sum(axis=0)
-                    for i, (dim, grad_dim) in enumerate(zip(other.data.shape, grad_other.shape)):
+                    for i, (dim, grad_dim) in enumerate(
+                        zip(other.data.shape, grad_other.shape)
+                    ):
                         if dim == 1 and grad_dim > 1:
                             grad_other = grad_other.sum(axis=i, keepdims=True)
-                    
-                    other.grad = grad_other if other.grad is None else other.grad + grad_other
+
+                    other.grad = (
+                        grad_other if other.grad is None else other.grad + grad_other
+                    )
 
             out._backward = _backward
             out._prev = {self, other}
@@ -149,9 +173,13 @@ class Tensor:
         if not isinstance(other, Tensor):
             other = Tensor(other)
 
-        out = Tensor(self.data - other.data, requires_grad=self.requires_grad or other.requires_grad)
+        out = Tensor(
+            self.data - other.data,
+            requires_grad=self.requires_grad or other.requires_grad,
+        )
 
         if out.requires_grad:
+
             def _backward():
                 if self.requires_grad:
                     # Gradient w.r.t. self is +1 * grad_output
@@ -160,11 +188,15 @@ class Tensor:
                     ndims_added = grad_self.ndim - self.data.ndim
                     for i in range(ndims_added):
                         grad_self = grad_self.sum(axis=0)
-                    for i, (dim, grad_dim) in enumerate(zip(self.data.shape, grad_self.shape)):
+                    for i, (dim, grad_dim) in enumerate(
+                        zip(self.data.shape, grad_self.shape)
+                    ):
                         if dim == 1 and grad_dim > 1:
                             grad_self = grad_self.sum(axis=i, keepdims=True)
-                    
-                    self.grad = grad_self if self.grad is None else self.grad + grad_self
+
+                    self.grad = (
+                        grad_self if self.grad is None else self.grad + grad_self
+                    )
 
                 if other.requires_grad:
                     # Gradient w.r.t. other is -1 * grad_output
@@ -173,11 +205,15 @@ class Tensor:
                     ndims_added = grad_other.ndim - other.data.ndim
                     for i in range(ndims_added):
                         grad_other = grad_other.sum(axis=0)
-                    for i, (dim, grad_dim) in enumerate(zip(other.data.shape, grad_other.shape)):
+                    for i, (dim, grad_dim) in enumerate(
+                        zip(other.data.shape, grad_other.shape)
+                    ):
                         if dim == 1 and grad_dim > 1:
                             grad_other = grad_other.sum(axis=i, keepdims=True)
-                    
-                    other.grad = grad_other if other.grad is None else other.grad + grad_other
+
+                    other.grad = (
+                        grad_other if other.grad is None else other.grad + grad_other
+                    )
 
             out._backward = _backward
             out._prev = {self, other}
@@ -196,9 +232,13 @@ class Tensor:
         if not isinstance(other, Tensor):
             other = Tensor(other)
 
-        out = Tensor(self.data / other.data, requires_grad=self.requires_grad or other.requires_grad)
+        out = Tensor(
+            self.data / other.data,
+            requires_grad=self.requires_grad or other.requires_grad,
+        )
 
         if out.requires_grad:
+
             def _backward():
                 if self.requires_grad:
                     # Gradient w.r.t. self is 1/other * grad_output
@@ -207,24 +247,32 @@ class Tensor:
                     ndims_added = grad_self.ndim - self.data.ndim
                     for i in range(ndims_added):
                         grad_self = grad_self.sum(axis=0)
-                    for i, (dim, grad_dim) in enumerate(zip(self.data.shape, grad_self.shape)):
+                    for i, (dim, grad_dim) in enumerate(
+                        zip(self.data.shape, grad_self.shape)
+                    ):
                         if dim == 1 and grad_dim > 1:
                             grad_self = grad_self.sum(axis=i, keepdims=True)
-                    
-                    self.grad = grad_self if self.grad is None else self.grad + grad_self
+
+                    self.grad = (
+                        grad_self if self.grad is None else self.grad + grad_self
+                    )
 
                 if other.requires_grad:
                     # Gradient w.r.t. other is -self/other^2 * grad_output
-                    grad_other = -out.grad * self.data / (other.data ** 2)
+                    grad_other = -out.grad * self.data / (other.data**2)
                     # Handle broadcasting
                     ndims_added = grad_other.ndim - other.data.ndim
                     for i in range(ndims_added):
                         grad_other = grad_other.sum(axis=0)
-                    for i, (dim, grad_dim) in enumerate(zip(other.data.shape, grad_other.shape)):
+                    for i, (dim, grad_dim) in enumerate(
+                        zip(other.data.shape, grad_other.shape)
+                    ):
                         if dim == 1 and grad_dim > 1:
                             grad_other = grad_other.sum(axis=i, keepdims=True)
-                    
-                    other.grad = grad_other if other.grad is None else other.grad + grad_other
+
+                    other.grad = (
+                        grad_other if other.grad is None else other.grad + grad_other
+                    )
 
             out._backward = _backward
             out._prev = {self, other}
@@ -241,10 +289,11 @@ class Tensor:
         """Raise tensor to a power."""
         if not isinstance(exponent, (int, float, np.number)):
             raise TypeError("Exponent must be a number")
-        
-        out = Tensor(self.data ** exponent, requires_grad=self.requires_grad)
-        
+
+        out = Tensor(self.data**exponent, requires_grad=self.requires_grad)
+
         if self.requires_grad:
+
             def _backward():
                 if out.grad is not None:
                     # Gradient of x^n is n * x^(n-1) * grad_output
@@ -252,31 +301,41 @@ class Tensor:
                         grad_self = np.zeros_like(self.data)
                     else:
                         grad_self = out.grad * exponent * (self.data ** (exponent - 1))
-                    
-                    self.grad = grad_self if self.grad is None else self.grad + grad_self
-            
+
+                    self.grad = (
+                        grad_self if self.grad is None else self.grad + grad_self
+                    )
+
             out._backward = _backward
             out._prev = {self}
-        
+
         return out
 
     def __matmul__(self, other):
         """Matrix multiplication."""
         other = other if isinstance(other, Tensor) else Tensor(other)
 
-        out = Tensor(self.data @ other.data, requires_grad=self.requires_grad or other.requires_grad)
+        out = Tensor(
+            self.data @ other.data,
+            requires_grad=self.requires_grad or other.requires_grad,
+        )
 
         if out.requires_grad:
+
             def _backward():
                 if self.requires_grad:
                     # For C = A @ B, dA = dC @ B.T
                     grad_self = out.grad @ other.data.T
-                    self.grad = grad_self if self.grad is None else self.grad + grad_self
+                    self.grad = (
+                        grad_self if self.grad is None else self.grad + grad_self
+                    )
 
                 if other.requires_grad:
                     # For C = A @ B, dB = A.T @ dC
                     grad_other = self.data.T @ out.grad
-                    other.grad = grad_other if other.grad is None else other.grad + grad_other
+                    other.grad = (
+                        grad_other if other.grad is None else other.grad + grad_other
+                    )
 
             out._backward = _backward
             out._prev = {self, other}
@@ -297,8 +356,9 @@ class Tensor:
         # Compute the result directly with numpy
         result_data = np.sum(self.data, axis=axis, keepdims=keepdims)
         result = Tensor(result_data, requires_grad=self.requires_grad)
-        
+
         if self.requires_grad:
+
             def _backward():
                 if result.grad is not None:
                     # Gradient of sum is just ones in the shape of the input
@@ -313,20 +373,21 @@ class Tensor:
                             # Need to expand dims first, then broadcast
                             grad_expanded = np.expand_dims(result.grad, axis=axis)
                             grad = np.broadcast_to(grad_expanded, self.data.shape)
-                    
+
                     self.grad = grad if self.grad is None else self.grad + grad
-            
+
             result._backward = _backward
             result._prev = {self}
-        
+
         return result
 
     def mean(self, axis=None, keepdims=False):
         """Calculate the mean of tensor elements along specified axis."""
         result_data = np.mean(self.data, axis=axis, keepdims=keepdims)
         result = Tensor(result_data, requires_grad=self.requires_grad)
-        
+
         if self.requires_grad:
+
             def _backward():
                 if result.grad is not None:
                     # Gradient of mean is 1/n
@@ -340,28 +401,50 @@ class Tensor:
                         else:
                             grad_expanded = np.expand_dims(result.grad / n, axis=axis)
                             grad = np.broadcast_to(grad_expanded, self.data.shape)
-                    
+
                     self.grad = grad if self.grad is None else self.grad + grad
-            
+
             result._backward = _backward
             result._prev = {self}
-        
+
         return result
 
     def exp(self):
         """Calculate the exponential of all tensor elements."""
         out = Tensor(np.exp(self.data), requires_grad=self.requires_grad)
-        
+
         if self.requires_grad:
+
             def _backward():
                 if out.grad is not None:
                     # Gradient of exp(x) is exp(x) * grad_output
                     grad_self = out.grad * out.data  # out.data is exp(self.data)
-                    self.grad = grad_self if self.grad is None else self.grad + grad_self
-            
+                    self.grad = (
+                        grad_self if self.grad is None else self.grad + grad_self
+                    )
+
             out._backward = _backward
             out._prev = {self}
-        
+
+        return out
+
+    def log(self):
+        """Calculate the natural logarithm of all tensor elements."""
+        out = Tensor(np.log(self.data), requires_grad=self.requires_grad)
+
+        if self.requires_grad:
+
+            def _backward():
+                if out.grad is not None:
+                    # Gradient of log(x) is 1/x * grad_output
+                    grad_self = out.grad / self.data
+                    self.grad = (
+                        grad_self if self.grad is None else self.grad + grad_self
+                    )
+
+            out._backward = _backward
+            out._prev = {self}
+
         return out
 
     def backward(self):
@@ -376,20 +459,20 @@ class Tensor:
             else:
                 # Non-scalar tensor - initialize with ones
                 self.grad = np.ones_like(self.data)
-        
+
         # Build topological order of computation graph
         topo = []
         visited = set()
-        
+
         def build_topo(tensor):
             if tensor not in visited:
                 visited.add(tensor)
                 for parent in tensor._prev:
                     build_topo(parent)
                 topo.append(tensor)
-        
+
         build_topo(self)
-        
+
         # Go through the topological order backwards and call backward functions
         for tensor in reversed(topo):
             tensor._backward()
@@ -419,18 +502,27 @@ class Tensor:
 
     def reshape(self, *shape):
         """Reshape the tensor to the given shape."""
-        new_shape = shape[0] if len(shape) == 1 and isinstance(shape[0], (tuple, list)) else shape
-        
+        new_shape = (
+            shape[0]
+            if len(shape) == 1 and isinstance(shape[0], (tuple, list))
+            else shape
+        )
+
         out = Tensor(self.data.reshape(new_shape), requires_grad=self.requires_grad)
-        
+
         if self.requires_grad:
+
             def _backward():
                 if out.grad is not None:
-                    self.grad = out.grad.reshape(self.data.shape) if self.grad is None else self.grad + out.grad.reshape(self.data.shape)
-            
+                    self.grad = (
+                        out.grad.reshape(self.data.shape)
+                        if self.grad is None
+                        else self.grad + out.grad.reshape(self.data.shape)
+                    )
+
             out._backward = _backward
             out._prev = {self}
-        
+
         return out
 
     def __getitem__(self, idx):
@@ -438,6 +530,7 @@ class Tensor:
         out = Tensor(self.data[idx], requires_grad=self.requires_grad)
 
         if self.requires_grad:
+
             def _backward():
                 if out.grad is not None:
                     if self.grad is None:
@@ -453,14 +546,17 @@ class Tensor:
     def T(self):
         """Return the transpose of the tensor."""
         out = Tensor(self.data.T, requires_grad=self.requires_grad)
-        
+
         if self.requires_grad:
+
             def _backward():
                 if out.grad is not None:
                     # Gradient of transpose is just transpose of gradient
-                    self.grad = out.grad.T if self.grad is None else self.grad + out.grad.T
-            
+                    self.grad = (
+                        out.grad.T if self.grad is None else self.grad + out.grad.T
+                    )
+
             out._backward = _backward
             out._prev = {self}
-        
+
         return out

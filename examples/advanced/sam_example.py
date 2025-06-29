@@ -235,12 +235,20 @@ def compare_optimizers():
 
     # Define optimizers to compare - FIXED IMPORTS
     optimizers_config = [
-        ("SGD", lambda params: SGD(params, lr=0.01)),  # No momentum parameter for base SGD
-        ("SGD-Momentum", lambda params: SGDMomentum(params, lr=0.01, momentum=0.9)),  # Use SGDMomentum
+        (
+            "SGD",
+            lambda params: SGD(params, lr=0.01),
+        ),  # No momentum parameter for base SGD
+        (
+            "SGD-Momentum",
+            lambda params: SGDMomentum(params, lr=0.01, momentum=0.9),
+        ),  # Use SGDMomentum
         ("Adam", lambda params: Adam(params, lr=0.001)),
         (
             "SAM-SGD",
-            lambda params: SAM(params, SGDMomentum(params, lr=0.01, momentum=0.9), rho=0.05),
+            lambda params: SAM(
+                params, SGDMomentum(params, lr=0.01, momentum=0.9), rho=0.05
+            ),
         ),
         ("SAM-Adam", lambda params: SAM(params, Adam(params, lr=0.001), rho=0.05)),
     ]
@@ -257,7 +265,12 @@ def compare_optimizers():
 
             # Train model
             history = train_model(
-                model, train_loader, val_loader, optimizer, criterion, epochs=5  # Reduced epochs for demo
+                model,
+                train_loader,
+                val_loader,
+                optimizer,
+                criterion,
+                epochs=5,  # Reduced epochs for demo
             )
 
             # Final test evaluation
@@ -399,7 +412,9 @@ if __name__ == "__main__":
 
                 # Show SAM vs non-SAM comparison
                 sam_optimizers = [name for name in results.keys() if "SAM" in name]
-                regular_optimizers = [name for name in results.keys() if "SAM" not in name]
+                regular_optimizers = [
+                    name for name in results.keys() if "SAM" not in name
+                ]
 
                 if sam_optimizers and regular_optimizers:
                     avg_sam_acc = np.mean(

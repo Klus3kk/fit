@@ -139,7 +139,7 @@ class BatchNorm(Layer):
 class LayerNorm(Layer):
     """
     Layer Normalization: normalizes inputs across the feature dimension.
-    
+
     Unlike BatchNorm, LayerNorm normalizes across features for each sample independently.
     """
 
@@ -152,10 +152,10 @@ class LayerNorm(Layer):
             eps: Small constant for numerical stability
         """
         super().__init__()
-        
+
         if isinstance(normalized_shape, int):
             normalized_shape = (normalized_shape,)
-        
+
         self.normalized_shape = normalized_shape
         self.eps = eps
 
@@ -180,7 +180,7 @@ class LayerNorm(Layer):
         # Calculate mean and variance across the feature dimensions
         # For most cases, this is the last dimension(s)
         axes_to_normalize = tuple(range(-len(self.normalized_shape), 0))
-        
+
         mean = np.mean(x.data, axis=axes_to_normalize, keepdims=True)
         var = np.var(x.data, axis=axes_to_normalize, keepdims=True)
 
@@ -197,19 +197,31 @@ class LayerNorm(Layer):
         def _backward():
             if output.grad is None or not x.requires_grad:
                 return
-            
+
             # For simplicity, just pass through the gradient
             # A full implementation would compute proper LayerNorm gradients
             x.grad = output.grad if x.grad is None else x.grad + output.grad
-            
+
             # Update weight and bias gradients
             if self.weight.requires_grad:
-                weight_grad = np.sum(output.grad * normalized, axis=tuple(range(x.data.ndim - len(self.normalized_shape))))
-                self.weight.grad = weight_grad if self.weight.grad is None else self.weight.grad + weight_grad
-            
+                weight_grad = np.sum(
+                    output.grad * normalized,
+                    axis=tuple(range(x.data.ndim - len(self.normalized_shape))),
+                )
+                self.weight.grad = (
+                    weight_grad
+                    if self.weight.grad is None
+                    else self.weight.grad + weight_grad
+                )
+
             if self.bias.requires_grad:
-                bias_grad = np.sum(output.grad, axis=tuple(range(x.data.ndim - len(self.normalized_shape))))
-                self.bias.grad = bias_grad if self.bias.grad is None else self.bias.grad + bias_grad
+                bias_grad = np.sum(
+                    output.grad,
+                    axis=tuple(range(x.data.ndim - len(self.normalized_shape))),
+                )
+                self.bias.grad = (
+                    bias_grad if self.bias.grad is None else self.bias.grad + bias_grad
+                )
 
         output._backward = _backward
         output._prev = {x, self.weight, self.bias}
