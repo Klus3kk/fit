@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fit"
+version = "0.8.0"
+description = "ML/DL library built from scratch with PyTorch-like API"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Łukasz Bielaszewski", email = "lukaszbielaszewskibiz@gmail.com"}]
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.20.0",
+]
+classifiers = [
+    "Development Status :: Delta",
+    "Intended Audience :: Developers, New Users into Machine Learning",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0.0",
+    "pytest-cov>=2.12.0",
+    "flake8>=3.9.0",
+    "black>=21.5b2",
+]
+examples = [
+    "matplotlib>=3.4.0",
+    "jupyter>=1.0.0",
+    "notebook>=6.4.0",
+    "scikit-learn>=0.24.0",
+    "pandas>=1.2.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Klus3kk/fit"
+Repository = "https://github.com/Klus3kk/fit"
+
+[tool.setuptools.packages.find]
+include = ["fit*"]
+
+[tool.black]
+line-length = 70
+
+[tool.isort]
+profile = "black"
+
+[tool.mypy] # type checker
+python_version = "3.8"
+warn_return_any = true
+disallow_untyped_defs = true

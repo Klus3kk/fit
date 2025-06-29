@@ -1,6 +1,9 @@
 test.py
-*/__pycache__
+__pycache__/
 logs
-fit.egg-info
 .venv
 .idea
+venv
+mnist_model.pkl
+*.png
+fit.egg-info
