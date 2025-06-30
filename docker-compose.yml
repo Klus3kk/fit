@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # Main development environment
+  fit:
+    build: .
+    volumes:
+      - .:/app
+      - fit_cache:/home/fit/.cache
+    environment:
+      - PYTHONPATH=/app
+    command: bash
+
+  # Run tests
+  test:
+    build: .
+    volumes:
+      - .:/app
+    command: python -m pytest tests/ -v
+
+  # Jupyter notebook server
+  jupyter:
+    build: .
+    volumes:
+      - .:/app
+      - fit_cache:/home/fit/.cache
+    ports:
+      - "8888:8888"
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+    command: >
+      jupyter lab
+      --ip=0.0.0.0
+      --port=8888
+      --no-browser
+      --allow-root
+      --ServerApp.token=''
+      --ServerApp.password=''
+      --ServerApp.allow_origin='*'
+
+  # Development with hot reload
+  dev:
+    build: .
+    volumes:
+      - .:/app
+      - fit_cache:/home/fit/.cache
+    environment:
+      - PYTHONPATH=/app
+    stdin_open: true
+    tty: true
+    command: bash
