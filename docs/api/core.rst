@@ -19,6 +19,14 @@ Autograd
    :undoc-members:
    :show-inheritance:
 
+Operations
+----------
+
+.. automodule:: fit.core.ops
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Exceptions
 ----------
 

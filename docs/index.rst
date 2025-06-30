@@ -82,6 +82,10 @@ Documentation
    api/optim
    api/loss
    api/data
+   api/utils
+   api/monitor
+   api/ensemble
+   api/simple
 
 .. toctree::
    :maxdepth: 2
