@@ -2,7 +2,7 @@
 
 A PyTorch-like machine learning library built from scratch with NumPy. Train neural networks with automatic differentiation, no dependencies beyond NumPy.
 
-[Documentation](https://fit.readthedocs.io/) | [Examples](examples/)
+[Documentation](https://fit-ml.readthedocs.io/) | [Examples](examples/)
 
 ## Why FIT?
 
