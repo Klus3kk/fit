@@ -1,0 +1,21 @@
+# FIT Library Configuration
+# Override any setting by creating your own config file or using environment variables
+
+# Core settings
+model:
+  dtype: "float32"
+  seed: 42
+
+# Training defaults
+training:
+  epochs: 100
+  batch_size: 32
+  learning_rate: 0.001
+  early_stopping:
+    patience: 10
+    min_delta: 1e-4
+
+# Logging
+logging:
+  level: "INFO"
+  log_dir: "./logs"
