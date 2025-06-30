@@ -125,7 +125,7 @@ def load_model(path, model_class=None):
                     else:
                         raise ValueError(f"Unknown layer type: {layer_type}")
 
-                    model.layers.append(layer)
+                    model.add_layer(layer)
         else:
             raise ValueError(f"Cannot instantiate model of type {model_type}")
 
