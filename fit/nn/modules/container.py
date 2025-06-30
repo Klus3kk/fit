@@ -80,6 +80,8 @@ class Sequential(Layer):
                 layer_config.update(layer.get_config())
             layers_config.append(layer_config)
         return {"layers": layers_config}
+    
+    
 
 
 class ModuleList(Layer):
