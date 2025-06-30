@@ -7,3 +7,4 @@ venv
 mnist_model.pkl
 *.png
 fit.egg-info
+test
