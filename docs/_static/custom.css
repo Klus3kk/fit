@@ -1,0 +1,33 @@
+/* Custom CSS for FIT documentation */
+
+.wy-nav-content {
+    max-width: none;
+}
+
+.rst-content .code-block-caption {
+    background-color: #f8f8f8;
+    border: 1px solid #e1e4e5;
+    padding: 6px 12px;
+    margin-bottom: -1px;
+    font-size: 14px;
+}
+
+.rst-content pre.literal-block, .rst-content div[class^="highlight"] pre {
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+/* Better code highlighting */
+.highlight .k { color: #0000ff; }
+.highlight .s { color: #008000; }
+.highlight .c { color: #808080; font-style: italic; }
+
+/* Improve table styling */
+.rst-content table.docutils {
+    border: 1px solid #e1e4e5;
+}
+
+.rst-content table.docutils td, .rst-content table.docutils th {
+    border: 1px solid #e1e4e5;
+    padding: 8px 16px;
+}
